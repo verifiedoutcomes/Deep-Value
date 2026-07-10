@@ -36,28 +36,43 @@ export default function DevParityScreen() {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: space.md }}>
       <Banner tone={report.failures.length ? 'warn' : 'info'}>
-        {report.failures.length} of {report.diffs.length} fields outside tolerance · fixture{' '}
-        {report.fixtureDate} vs live {report.liveDate}
+        {report.failures.length} hard failures · {report.drift.length} recency drift ·{' '}
+        {report.missingLive.length} missing (plan cap) · fixture {report.fixtureDate} vs live{' '}
+        {report.liveDate}
       </Banner>
-      {report.diffs.map((d) => (
-        <View
-          key={d.path}
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            paddingVertical: 3,
-            borderBottomColor: colors.border,
-            borderBottomWidth: 0.5,
-          }}
-        >
-          <Mono size="xs" color={d.withinTolerance ? colors.textDim : colors.red}>
-            {d.path}
-          </Mono>
-          <Mono size="xs" color={d.withinTolerance ? colors.textFaint : colors.red}>
-            {d.relDiff == null ? '–' : `${(d.relDiff * 100).toFixed(2)}%`}
-          </Mono>
-        </View>
-      ))}
+      {report.diffs.map((d) => {
+        const color =
+          d.category === 'fail'
+            ? colors.red
+            : d.category === 'drift'
+              ? colors.amber
+              : d.category === 'ok'
+                ? colors.textDim
+                : colors.textFaint;
+        return (
+          <View
+            key={d.path}
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              paddingVertical: 3,
+              borderBottomColor: colors.border,
+              borderBottomWidth: 0.5,
+            }}
+          >
+            <Mono size="xs" color={color}>
+              {d.path}
+            </Mono>
+            <Mono size="xs" color={color}>
+              {d.category === 'missing-live'
+                ? 'missing'
+                : d.relDiff == null
+                  ? '–'
+                  : `${(d.relDiff * 100).toFixed(2)}%`}
+            </Mono>
+          </View>
+        );
+      })}
     </ScrollView>
   );
 }

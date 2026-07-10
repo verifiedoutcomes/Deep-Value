@@ -12,6 +12,7 @@ export default function SettingsScreen() {
   const devMode = useAppStore((s) => s.devMode);
   const setDevMode = useAppStore((s) => s.setDevMode);
   const proxyBaseUrl = useAppStore((s) => s.proxyBaseUrl);
+  const devFmpApiKey = useAppStore((s) => s.devFmpApiKey);
   const ticker = useAppStore((s) => s.selectedTicker);
   const tickerState = useAppStore((s) => s.tickers[ticker]);
   const pinSnapshot = useAppStore((s) => s.pinSnapshot);
@@ -81,6 +82,22 @@ export default function SettingsScreen() {
         <Mono size="xs" color={colors.textFaint}>
           All provider calls route through the serverless proxy (apps/api); no API key is stored
           in this app.
+        </Mono>
+        <View style={{ height: space.sm }} />
+        <SectionTitle>FMP API key (dev only)</SectionTitle>
+        <TextInput
+          style={styles.input}
+          placeholder="used directly against FMP when no proxy is set"
+          placeholderTextColor={colors.textFaint}
+          autoCapitalize="none"
+          autoCorrect={false}
+          secureTextEntry
+          defaultValue={devFmpApiKey}
+          onEndEditing={(e) => useAppStore.setState({ devFmpApiKey: e.nativeEvent.text.trim() })}
+        />
+        <Mono size="xs" color={colors.textFaint}>
+          Development convenience. The free tier covers ~5 years of history; the model's 2007+
+          table needs the Starter plan. Ship production builds with the proxy instead.
         </Mono>
       </Card>
 

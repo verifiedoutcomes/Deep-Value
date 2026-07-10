@@ -18,11 +18,27 @@ import { BUNDLED_META, useAppStore } from './store';
 export function proxyBaseUrl(): string {
   const fromStore = useAppStore.getState().proxyBaseUrl;
   if (fromStore) return fromStore;
-  return (Constants.expoConfig?.extra?.proxyBaseUrl as string) ?? '';
+  const fromConfig = (Constants.expoConfig?.extra?.proxyBaseUrl as string) ?? '';
+  // the placeholder URL in app.json is not a working proxy
+  return fromConfig.includes('example.workers.dev') ? '' : fromConfig;
+}
+
+/** True when either a proxy or a dev key makes live pulls possible. */
+export function liveDataConfigured(): boolean {
+  return Boolean(proxyBaseUrl() || useAppStore.getState().devFmpApiKey);
 }
 
 export function makeProvider(): FmpProvider {
-  return new FmpProvider({ baseUrl: `${proxyBaseUrl().replace(/\/$/, '')}/fmp` });
+  const proxy = proxyBaseUrl();
+  if (proxy) {
+    return new FmpProvider({ baseUrl: `${proxy.replace(/\/$/, '')}/fmp` });
+  }
+  // Dev fallback: straight to FMP with the key from Settings. Production
+  // builds should configure the proxy so no key lives on-device.
+  return new FmpProvider({
+    baseUrl: 'https://financialmodelingprep.com',
+    apiKey: useAppStore.getState().devFmpApiKey,
+  });
 }
 
 export function symbolFor(ticker: string): SymbolRef {
@@ -47,7 +63,7 @@ export function useTickerSearch(query: string) {
   return useQuery({
     queryKey: ['search', query],
     queryFn: () => makeProvider().search(query),
-    enabled: query.trim().length >= 1 && Boolean(proxyBaseUrl()),
+    enabled: query.trim().length >= 1 && liveDataConfigured(),
     staleTime: 60_000,
   });
 }
@@ -57,7 +73,7 @@ export function useMetaParity(enabled: boolean) {
   return useQuery<ParityReport>({
     queryKey: ['meta-parity'],
     queryFn: async () => compareSnapshots(BUNDLED_META, await pullSnapshot('META')),
-    enabled: enabled && Boolean(proxyBaseUrl()),
+    enabled: enabled && liveDataConfigured(),
     staleTime: Infinity,
   });
 }

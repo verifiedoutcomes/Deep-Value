@@ -72,6 +72,12 @@ npx wrangler deploy                       # note the workers.dev URL
 Then set that URL as `extra.proxyBaseUrl` in `apps/mobile/app.json` (or at
 runtime in the app's Settings).
 
+For development without a deployed proxy, paste an FMP key into Settings →
+"FMP API key (dev only)" and the app talks to FMP directly. Note the free
+tier caps annual history at 5 years (the adapter degrades gracefully);
+the full 2007+ table the model wants needs FMP's Starter plan. Never
+commit keys to the repo.
+
 ## Mobile app
 
 ```bash

@@ -34,6 +34,9 @@ interface AppState {
   selectedTicker: string;
   capexTreatment: CapexTreatment;
   proxyBaseUrl: string;
+  /** Dev convenience only: talks to FMP directly when no proxy is set.
+   *  Production builds should always use the proxy (key server-side). */
+  devFmpApiKey: string;
   devMode: boolean;
   // actions
   selectTicker: (t: string) => void;
@@ -66,6 +69,7 @@ export const useAppStore = create<AppState>()(
       selectedTicker: 'META',
       capexTreatment: 'sheet',
       proxyBaseUrl: '',
+      devFmpApiKey: '',
       devMode: false,
 
       selectTicker: (t) =>

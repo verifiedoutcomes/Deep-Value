@@ -48,6 +48,26 @@ export class FmpProvider implements DataProvider {
     return (await res.json()) as T;
   }
 
+  /**
+   * FMP's free tier returns HTTP 402 when `limit` exceeds its 5-year
+   * history cap. Retry once at the cap so the app degrades to five years
+   * of history instead of failing (full 2007+ history needs Starter).
+   */
+  private async getWithLimitFallback<T>(
+    path: string,
+    params: Record<string, string>,
+  ): Promise<T> {
+    try {
+      return await this.get<T>(path, params);
+    } catch (e) {
+      const capped = Number(params.limit) > 5;
+      if (capped && e instanceof Error && e.message.includes('HTTP 402')) {
+        return this.get<T>(path, { ...params, limit: '5' });
+      }
+      throw e;
+    }
+  }
+
   async search(query: string): Promise<SymbolRef[]> {
     const rows = await this.get<Json[]>('/stable/search-symbol', {
       query,
@@ -63,10 +83,14 @@ export class FmpProvider implements DataProvider {
   async quote(symbol: SymbolRef): Promise<QuoteData> {
     const [q] = await this.get<Json[]>('/stable/quote', { symbol: symbol.ticker });
     if (!q) throw new Error(`no quote for ${symbol.ticker}`);
+    const price = num(q.price) ?? 0;
+    const marketCap = num(q.marketCap) ?? 0;
     return {
-      price: num(q.price) ?? 0,
-      marketCap: num(q.marketCap) ?? 0,
-      shares: num(q.sharesOutstanding) ?? 0,
+      price,
+      marketCap,
+      // /stable/quote carries no share count; derive it from the two
+      // fields that do move together (O53 = P53 / I6 by construction).
+      shares: num(q.sharesOutstanding) ?? (price > 0 ? marketCap / price : 0),
       name: String(q.name ?? symbol.ticker),
       fiftyTwoWeekHigh: num(q.yearHigh),
       fiftyTwoWeekLow: num(q.yearLow),
@@ -77,17 +101,21 @@ export class FmpProvider implements DataProvider {
     const limit = String(new Date().getFullYear() - sinceYear + 2);
     const params = { symbol: symbol.ticker, period: 'annual', limit };
     const [income, cashflow, balance, ev, metrics] = await Promise.all([
-      this.get<Json[]>('/stable/income-statement', params),
-      this.get<Json[]>('/stable/cash-flow-statement', params),
-      this.get<Json[]>('/stable/balance-sheet-statement', params),
-      this.get<Json[]>('/stable/enterprise-values', params),
-      this.get<Json[]>('/stable/key-metrics', params),
+      this.getWithLimitFallback<Json[]>('/stable/income-statement', params),
+      this.getWithLimitFallback<Json[]>('/stable/cash-flow-statement', params),
+      this.getWithLimitFallback<Json[]>('/stable/balance-sheet-statement', params),
+      this.getWithLimitFallback<Json[]>('/stable/enterprise-values', params),
+      this.getWithLimitFallback<Json[]>('/stable/key-metrics', params),
     ]);
 
     const byYear = new Map<number, Partial<AnnualFundamentals>>();
     const yearOf = (r: Json): number | null => {
+      // fiscalYear arrives as a string; enterprise-values rows carry only
+      // a period-end date, so fall back to its year.
       const fy = Number(r.fiscalYear ?? r.calendarYear);
-      return Number.isFinite(fy) ? fy : null;
+      if (Number.isFinite(fy)) return fy;
+      const d = new Date(String(r.date ?? ''));
+      return Number.isNaN(d.getTime()) ? null : d.getUTCFullYear();
     };
     const merge = (rows: Json[], map: (r: Json) => Partial<AnnualFundamentals>) => {
       for (const r of rows) {
@@ -112,7 +140,10 @@ export class FmpProvider implements DataProvider {
     }));
     merge(balance, (r) => ({
       totalDebt: num(r.totalDebt),
-      cash: num(r.cashAndShortTermInvestments ?? r.cashAndCashEquivalents),
+      // DVH's net debt = total debt - cash & EQUIVALENTS (not incl. short
+      // term investments): verified against fixture M48..M53, where FMP's
+      // own netDebt field reproduces the sheet exactly.
+      cash: num(r.cashAndCashEquivalents),
       tangibleBook:
         num(r.totalStockholdersEquity) == null
           ? null
@@ -171,6 +202,7 @@ export class FmpProvider implements DataProvider {
     const b = balance[0] ?? {};
     const m = metricsTtm[0] ?? {};
     const equity = num((b as Json).totalStockholdersEquity);
+    const cashEq = num((b as Json).cashAndCashEquivalents);
     return {
       asOf: String((income[0] as Json | undefined)?.date ?? new Date().toISOString().slice(0, 10)),
       revenue: sum(income, 'revenue'),
@@ -181,7 +213,7 @@ export class FmpProvider implements DataProvider {
       capex: sum(cashflow, 'capitalExpenditure'),
       sbc: sum(cashflow, 'stockBasedCompensation'),
       totalDebt: num((b as Json).totalDebt),
-      cash: num((b as Json).cashAndShortTermInvestments ?? (b as Json).cashAndCashEquivalents),
+      cash: cashEq,
       tangibleBook:
         equity == null ? null : equity - (num((b as Json).goodwillAndIntangibleAssets) ?? 0),
       shares: null, // TTM shares come from the live quote (sheet O53)

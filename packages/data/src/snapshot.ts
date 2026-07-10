@@ -97,9 +97,12 @@ export async function loadCompanySnapshot(
   delete ttmRow.enterpriseValue; // Q53 = P53 + M53, derived by the engine
   rows.push(ttmRow);
 
+  // E15: DVH's ROIC is the latest ANNUAL key-metrics value (verified: the
+  // fixture's 0.1795 equals FMP's FY2025 returnOnInvestedCapital, not the
+  // TTM figure), falling back to the prior fiscal year, then TTM.
   const latestAnnual = annuals.find((r) => r.fiscalYear === latestFullYear);
-  const roic =
-    ttm.roic ?? latestAnnual?.roic ?? null; // E15: fall back to prior FY
+  const priorAnnual = annuals.find((r) => r.fiscalYear === latestFullYear - 1);
+  const roic = latestAnnual?.roic ?? priorAnnual?.roic ?? ttm.roic ?? null;
 
   return {
     ticker: symbol.ticker,

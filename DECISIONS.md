@@ -133,7 +133,39 @@ disagreed, **the file won**; those cases are called out explicitly.
     pinning a snapshot = Static mode; unpinned = newest pull. The bundled
     META fixture is the first-run snapshot with a banner + refresh offer.
 
-21. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+21. **DVH's vendor is FMP (verified live, 2026-07-10).** A live pull with a
+    real key reproduced every closed-fiscal-year fundamental 2021–2025 at
+    exactly 0.00% deviation (capex −69,691,000,000; OCF 115,800,000,000;
+    SBC 20,427,000,000 …). Three mappings were pinned down by this:
+    - **Net debt cash definition:** total debt − `cashAndCashEquivalents`
+      (NOT incl. short-term investments); FMP's own `netDebt` field equals
+      the sheet's M column for all five verifiable years.
+    - **ROIC (E15) is the latest ANNUAL key-metrics value** (fixture
+      0.1795 = FMP FY2025 `returnOnInvestedCapital` 0.17950279…, not the
+      TTM figure 0.1996). Fallback order: latest FY → prior FY → TTM.
+    - **Tangible book** = equity − `goodwillAndIntangibleAssets` (matches
+      2021–2024 exactly; the sheet's FY2025 value subtracts goodwill only —
+      a vendor-side inconsistency left as 1.9% parity drift).
+
+22. **FMP free tier: history capped at 5 years (HTTP 402 above limit=5).**
+    The adapter retries at the cap so free keys degrade to five years of
+    history instead of failing; the full 2007+ table needs the Starter
+    plan. Quote responses carry no share count → derived as
+    marketCap / price (exactly the P53/I6 relationship).
+
+23. **Parity report categories.** Closed fiscal years are immutable ⇒
+    out-of-tolerance there is a hard failure (3%; 15% for per-year market
+    cap/EV and share counts, whose sources differ). TTM and quote fields
+    drift legitimately as quarters land after the fixture date ⇒ reported
+    as recency drift, not failure. Live-side gaps from the free-tier cap ⇒
+    reported as missing. With the free key on 2026-07-10: 0 hard failures.
+
+24. **Dev-only direct key.** Settings accepts an FMP key used straight
+    against FMP when no proxy URL is set — development convenience only;
+    production builds configure the proxy so no key lives on-device. API
+    keys are never committed to the repo.
+
+25. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.
