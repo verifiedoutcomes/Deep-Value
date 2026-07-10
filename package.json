@@ -1,0 +1,20 @@
+{
+  "name": "deep-value-hunter",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/api",
+    "apps/mobile"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "extract-fixture": "python3 scripts/extract_fixture.py"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,0 +1,137 @@
+/**
+ * App state (zustand) + persistence (expo-sqlite kv-store).
+ *
+ * Per ticker the app persists: every pulled snapshot (timestamped, so a
+ * frozen state can be pinned -- the sheet's Static mode), scenario
+ * overrides, checklist answers. Global settings: capex treatment, pinned
+ * snapshot per ticker.
+ */
+import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import Storage from 'expo-sqlite/kv-store';
+import type {
+  CompanySnapshot,
+  ScenarioOverrides,
+} from '@dvh/engine';
+import type { CapexTreatment } from '@dvh/engine';
+import metaFixture from '@dvh/engine/fixtures/meta-2026-07-10.json';
+
+export const BUNDLED_META = metaFixture as unknown as CompanySnapshot;
+
+export interface TickerState {
+  /** newest first; index 0 is the live view unless a pin is set */
+  snapshots: CompanySnapshot[];
+  pinnedSnapshotDate?: string;
+  overrides: ScenarioOverrides;
+  checklist: boolean[]; // 14 answers, default all No
+  horizon: 3 | 5;
+  scenarioTab: 'bear' | 'base' | 'bull';
+}
+
+interface AppState {
+  watchlist: string[];
+  tickers: Record<string, TickerState>;
+  selectedTicker: string;
+  capexTreatment: CapexTreatment;
+  proxyBaseUrl: string;
+  devMode: boolean;
+  // actions
+  selectTicker: (t: string) => void;
+  addSnapshot: (t: string, snap: CompanySnapshot) => void;
+  pinSnapshot: (t: string, date?: string) => void;
+  setOverrides: (t: string, o: ScenarioOverrides) => void;
+  setChecklist: (t: string, idx: number, value: boolean) => void;
+  setHorizon: (t: string, h: 3 | 5) => void;
+  setScenarioTab: (t: string, tab: 'bear' | 'base' | 'bull') => void;
+  addToWatchlist: (t: string) => void;
+  removeFromWatchlist: (t: string) => void;
+  setCapexTreatment: (c: CapexTreatment) => void;
+  setDevMode: (v: boolean) => void;
+}
+
+const emptyTicker = (): TickerState => ({
+  snapshots: [],
+  overrides: {},
+  checklist: Array(14).fill(false),
+  horizon: 5,
+  scenarioTab: 'base',
+});
+
+export const useAppStore = create<AppState>()(
+  persist(
+    (set, get) => ({
+      // First-run experience: META pre-loaded from the bundled snapshot.
+      watchlist: ['META'],
+      tickers: { META: { ...emptyTicker(), snapshots: [BUNDLED_META] } },
+      selectedTicker: 'META',
+      capexTreatment: 'sheet',
+      proxyBaseUrl: '',
+      devMode: false,
+
+      selectTicker: (t) =>
+        set((s) => ({
+          selectedTicker: t,
+          tickers: s.tickers[t] ? s.tickers : { ...s.tickers, [t]: emptyTicker() },
+        })),
+      addSnapshot: (t, snap) =>
+        set((s) => {
+          const cur = s.tickers[t] ?? emptyTicker();
+          return {
+            tickers: {
+              ...s.tickers,
+              [t]: { ...cur, snapshots: [snap, ...cur.snapshots].slice(0, 25) },
+            },
+          };
+        }),
+      pinSnapshot: (t, date) =>
+        set((s) => ({
+          tickers: {
+            ...s.tickers,
+            [t]: { ...(s.tickers[t] ?? emptyTicker()), pinnedSnapshotDate: date },
+          },
+        })),
+      setOverrides: (t, overrides) =>
+        set((s) => ({
+          tickers: { ...s.tickers, [t]: { ...(s.tickers[t] ?? emptyTicker()), overrides } },
+        })),
+      setChecklist: (t, idx, value) =>
+        set((s) => {
+          const cur = s.tickers[t] ?? emptyTicker();
+          const checklist = [...cur.checklist];
+          checklist[idx] = value;
+          return { tickers: { ...s.tickers, [t]: { ...cur, checklist } } };
+        }),
+      setHorizon: (t, horizon) =>
+        set((s) => ({
+          tickers: { ...s.tickers, [t]: { ...(s.tickers[t] ?? emptyTicker()), horizon } },
+        })),
+      setScenarioTab: (t, scenarioTab) =>
+        set((s) => ({
+          tickers: { ...s.tickers, [t]: { ...(s.tickers[t] ?? emptyTicker()), scenarioTab } },
+        })),
+      addToWatchlist: (t) =>
+        set((s) => ({
+          watchlist: s.watchlist.includes(t) ? s.watchlist : [...s.watchlist, t],
+          tickers: s.tickers[t] ? s.tickers : { ...s.tickers, [t]: emptyTicker() },
+        })),
+      removeFromWatchlist: (t) =>
+        set((s) => ({ watchlist: s.watchlist.filter((x) => x !== t) })),
+      setCapexTreatment: (capexTreatment) => set({ capexTreatment }),
+      setDevMode: (devMode) => set({ devMode }),
+    }),
+    {
+      name: 'dvh-state-v1',
+      storage: createJSONStorage(() => Storage),
+    },
+  ),
+);
+
+/** The snapshot the UI should render for a ticker (pinned or newest). */
+export function activeSnapshot(state: TickerState | undefined): CompanySnapshot | null {
+  if (!state || state.snapshots.length === 0) return null;
+  if (state.pinnedSnapshotDate) {
+    const pinned = state.snapshots.find((s) => s.snapshotDate === state.pinnedSnapshotDate);
+    if (pinned) return pinned;
+  }
+  return state.snapshots[0] ?? null;
+}
