@@ -17,7 +17,7 @@ import { useTickerAnalysis } from '../../src/analysis';
 import { useRefreshSnapshot } from '../../src/data';
 import { useAppStore, BUNDLED_META } from '../../src/store';
 import { colors, deltaColor, space } from '../../src/theme';
-import { Banner, Card, KV, Mono, SectionTitle } from '../../src/components/ui';
+import { Banner, Card, Chip, KV, Mono, SectionTitle } from '../../src/components/ui';
 import { PriceChart } from '../../src/components/PriceChart';
 import { Sparkline } from '../../src/components/Sparkline';
 import { money, num, pct, pctSigned, price, ratio, shares } from '../../src/format';
@@ -32,32 +32,47 @@ interface ColumnSpec {
   summaryLabel: string;
 }
 
+/** All the sheet's columns (D..AB), grouped for readability. */
 const COLUMNS: ColumnSpec[] = [
   { key: 'rev', title: 'Revenue', value: (r) => r.revenue, fmt: money, summary: (s) => s.revenueCagr8, summaryFmt: pct, summaryLabel: '8y cagr' },
   { key: 'yoy', title: 'Y/Y Δ', value: (_r, d) => d.revenueYoY, fmt: pctSigned, summary: (s) => s.revenueYoyAvg4, summaryFmt: pct, summaryLabel: 'avg 4' },
+  { key: 'gp', title: 'Gross Profit', value: (r) => r.grossProfit, fmt: money, summary: () => null, summaryLabel: '' },
+  { key: 'gm', title: 'Gross Mgn', value: (_r, d) => d.grossMargin, fmt: pct, summary: () => null, summaryLabel: '' },
   { key: 'opinc', title: 'Op Income', value: (r) => r.operatingIncome, fmt: money, summary: (s) => s.operatingIncomeCagr8, summaryFmt: pct, summaryLabel: '8y cagr' },
   { key: 'opmar', title: 'Op Margin', value: (_r, d) => d.operatingMargin, fmt: pct, summary: (s) => s.operatingMarginAvg4, summaryFmt: pct, summaryLabel: 'avg 4' },
+  { key: 'ni', title: 'Net Income', value: (r) => r.netIncome, fmt: money, summary: () => null, summaryLabel: '' },
+  { key: 'nm', title: 'Net Mgn', value: (_r, d) => d.netMargin, fmt: pct, summary: () => null, summaryLabel: '' },
   { key: 'ocf', title: 'Op Cash Flow', value: (r) => r.operatingCashFlow, fmt: money, summary: (s) => s.ocfCagr8, summaryFmt: pct, summaryLabel: '8y cagr' },
   { key: 'capex', title: 'Capex', value: (r) => r.capex, fmt: money, summary: (s) => s.capexCagr8, summaryFmt: pct, summaryLabel: '8y cagr' },
   { key: 'sbc', title: 'SBC', value: (r) => r.sbc, fmt: money, summary: (s) => s.sbcCagr8, summaryFmt: pct, summaryLabel: '8y cagr' },
   { key: 'fcf', title: 'Adj FCF', value: (_r, d) => d.adjFcf, fmt: money, summary: (s) => s.adjFcfCagr8, summaryFmt: pct, summaryLabel: '8y cagr' },
   { key: 'fcfm', title: 'Adj FCF Mgn', value: (_r, d) => d.adjFcfMargin, fmt: pct, summary: (s) => s.adjFcfMarginAvg4, summaryFmt: pct, summaryLabel: 'avg 4' },
+  { key: 'fcfy', title: 'Adj FCF Yield', value: (_r, d) => d.adjFcfYield, fmt: pct, summary: (s) => s.adjFcfYieldTrimmean, summaryFmt: pct, summaryLabel: 'trim mean' },
   { key: 'nd', title: 'Net Debt', value: (r) => r.netDebt, fmt: money, summary: () => null, summaryLabel: '' },
   { key: 'ndebit', title: 'ND / EBIT', value: (_r, d) => d.netDebtToEbit, fmt: (v) => num(v, 2), summary: (s) => s.netDebtEbitAvg13, summaryFmt: (v) => num(v, 2), summaryLabel: 'avg 13' },
   { key: 'sh', title: 'Shares', value: (r) => r.shares, fmt: shares, summary: (s) => s.sharesCagr10, summaryFmt: pct, summaryLabel: '10y cagr' },
   { key: 'mc', title: 'Market Cap', value: (r) => r.marketCap, fmt: money, summary: (s) => s.marketCapCagr10, summaryFmt: pct, summaryLabel: '10y cagr' },
   { key: 'ev', title: 'EV', value: (_r, d) => d.enterpriseValue, fmt: money, summary: (s) => s.evCagr10, summaryFmt: pct, summaryLabel: '10y cagr' },
-  { key: 'fcfy', title: 'Adj FCF Yield', value: (_r, d) => d.adjFcfYield, fmt: pct, summary: (s) => s.adjFcfYieldTrimmean, summaryFmt: pct, summaryLabel: 'trim mean' },
   { key: 'evebit', title: 'EV/EBIT', value: (_r, d) => d.evToEbit, fmt: (v) => num(v, 1), summary: (s) => s.evEbitTrimmean, summaryFmt: (v) => num(v, 1), summaryLabel: 'trim mean' },
   { key: 'tb', title: 'Tang Book', value: (r) => r.tangibleBook, fmt: money, summary: (s) => s.tangibleBookCagr10, summaryFmt: pct, summaryLabel: '10y cagr' },
-  { key: 'gp', title: 'Gross Profit', value: (r) => r.grossProfit, fmt: money, summary: () => null, summaryLabel: '' },
-  { key: 'gm', title: 'Gross Mgn', value: (_r, d) => d.grossMargin, fmt: pct, summary: () => null, summaryLabel: '' },
-  { key: 'ni', title: 'Net Income', value: (r) => r.netIncome, fmt: money, summary: () => null, summaryLabel: '' },
-  { key: 'nm', title: 'Net Mgn', value: (_r, d) => d.netMargin, fmt: pct, summary: () => null, summaryLabel: '' },
+  // income-split waterfall components (sheet Z, AA, AB)
+  { key: 'opni', title: 'OpInc − NetInc', value: (_r, d) => d.opIncMinusNetInc, fmt: money, summary: () => null, summaryLabel: '' },
+  { key: 'gpop', title: 'GP − OpInc', value: (_r, d) => d.grossProfitMinusOpInc, fmt: money, summary: () => null, summaryLabel: '' },
+  { key: 'revgp', title: 'Rev − GP', value: (_r, d) => d.revenueMinusGrossProfit, fmt: money, summary: () => null, summaryLabel: '' },
+];
+
+/** Column groups: the full sheet table, split so it reads on a phone. */
+const GROUPS: { key: string; label: string; cols: string[] | null }[] = [
+  { key: 'all', label: 'All', cols: null },
+  { key: 'pnl', label: 'P&L', cols: ['rev', 'yoy', 'gp', 'gm', 'opinc', 'opmar', 'ni', 'nm'] },
+  { key: 'cash', label: 'Cash Flow', cols: ['ocf', 'capex', 'sbc', 'fcf', 'fcfm', 'fcfy'] },
+  { key: 'bal', label: 'Balance & Val', cols: ['nd', 'ndebit', 'sh', 'mc', 'ev', 'evebit', 'tb'] },
+  { key: 'split', label: 'Income Split', cols: ['opni', 'gpop', 'revgp'] },
 ];
 
 const ROW_H = 22;
 const COL_W = 96;
+const HEAD_H = 44;
 
 export default function CompanyScreen() {
   const { width } = useWindowDimensions();
@@ -187,57 +202,73 @@ function HistoryTable({
   derived: DerivedRow[];
   summary: SummaryStats;
 }) {
+  const [group, setGroup] = React.useState('all');
+  const active = GROUPS.find((g) => g.key === group) ?? GROUPS[0]!;
+  const cols = active.cols
+    ? active.cols.map((k) => COLUMNS.find((c) => c.key === k)!).filter(Boolean)
+    : COLUMNS;
+
   return (
-    <View style={{ flexDirection: 'row' }}>
-      {/* pinned year column */}
-      <View style={styles.yearCol}>
-        <View style={{ height: 42 }}>
-          <Mono size="xs" color={colors.textFaint}>FY</Mono>
-        </View>
-        {snapshotRows.map((r, i) => (
-          <View key={i} style={{ height: ROW_H, justifyContent: 'center' }}>
-            <Mono size="xs" color={r.yearLabel === 'TTM' ? colors.amber : colors.textDim} bold={r.yearLabel === 'TTM'}>
-              {String(r.yearLabel)}
-            </Mono>
-          </View>
+    <View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.groupRow}
+      >
+        {GROUPS.map((g) => (
+          <Chip key={g.key} label={g.label} active={group === g.key} onPress={() => setGroup(g.key)} />
         ))}
-        <View style={{ height: ROW_H + 6, justifyContent: 'center' }}>
-          <Mono size="xs" color={colors.textFaint}>Σ</Mono>
-        </View>
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        {COLUMNS.map((col) => {
-          const values = snapshotRows.map((r, i) => col.value(r, derived[i]!));
-          const summaryVal = col.summary(summary);
-          return (
-            <View key={col.key} style={{ width: COL_W, paddingRight: space.sm }}>
-              <View style={{ height: 42 }}>
-                <Mono size="xs" color={colors.textDim}>{col.title}</Mono>
-                <Sparkline values={sparklineWindow(values)} width={COL_W - 12} height={18} />
-              </View>
-              {values.map((v, i) => (
-                <View key={i} style={{ height: ROW_H, justifyContent: 'center' }}>
-                  <Mono size="xs" color={i === values.length - 1 ? colors.text : colors.textDim}>
-                    {col.fmt(v)}
-                  </Mono>
-                </View>
-              ))}
-              <View
-                style={{
-                  height: ROW_H + 6,
-                  justifyContent: 'center',
-                  borderTopColor: colors.border,
-                  borderTopWidth: StyleSheet.hairlineWidth,
-                }}
-              >
-                <Mono size="xs" color={colors.blue} bold>
-                  {summaryVal == null ? '' : `${(col.summaryFmt ?? col.fmt)(summaryVal)} ${col.summaryLabel}`}
-                </Mono>
-              </View>
-            </View>
-          );
-        })}
       </ScrollView>
+      <View style={{ flexDirection: 'row' }}>
+        {/* pinned year column: header height matches data-column headers
+            exactly so every row lines up across the whole table */}
+        <View style={styles.yearCol}>
+          <View style={[styles.colHead, { alignItems: 'flex-start' }]}>
+            <Mono size="xs" color={colors.textFaint}>FY</Mono>
+          </View>
+          {snapshotRows.map((r, i) => (
+            <View key={i} style={styles.cellRow}>
+              <Mono size="xs" color={r.yearLabel === 'TTM' ? colors.amber : colors.textDim} bold={r.yearLabel === 'TTM'}>
+                {String(r.yearLabel)}
+              </Mono>
+            </View>
+          ))}
+          <View style={styles.sumRowYear}>
+            <Mono size="xs" color={colors.textFaint}>Σ</Mono>
+          </View>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {cols.map((col) => {
+            const values = snapshotRows.map((r, i) => col.value(r, derived[i]!));
+            const summaryVal = col.summary(summary);
+            return (
+              <View key={col.key} style={styles.dataCol}>
+                {/* header: title and sparkline share the column's right edge
+                    with the numbers below, so everything aligns */}
+                <View style={styles.colHead}>
+                  <Mono size="xs" color={colors.textDim}>{col.title}</Mono>
+                  <Sparkline values={sparklineWindow(values)} width={COL_W - 12} height={18} />
+                </View>
+                {values.map((v, i) => (
+                  <View key={i} style={[styles.cellRow, { alignItems: 'flex-end' }]}>
+                    <Mono size="xs" color={i === values.length - 1 ? colors.text : colors.textDim}>
+                      {col.fmt(v)}
+                    </Mono>
+                  </View>
+                ))}
+                <View style={styles.sumRow}>
+                  <Mono size="xs" color={colors.blue} bold>
+                    {summaryVal == null ? '' : (col.summaryFmt ?? col.fmt)(summaryVal)}
+                  </Mono>
+                  {summaryVal != null && (
+                    <Mono size="xs" color={colors.textFaint}>{col.summaryLabel}</Mono>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -257,5 +288,40 @@ const styles = StyleSheet.create({
     borderRightColor: colors.border,
     borderRightWidth: StyleSheet.hairlineWidth,
     marginRight: space.sm,
+  },
+  groupRow: {
+    paddingHorizontal: space.md,
+    paddingBottom: space.sm,
+    flexDirection: 'row',
+  },
+  dataCol: {
+    width: COL_W,
+    paddingRight: space.sm,
+    alignItems: 'flex-end',
+  },
+  colHead: {
+    height: HEAD_H,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    alignSelf: 'stretch',
+  },
+  cellRow: {
+    height: ROW_H,
+    justifyContent: 'center',
+    alignSelf: 'stretch',
+  },
+  sumRow: {
+    height: ROW_H + 12,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    alignSelf: 'stretch',
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  sumRowYear: {
+    height: ROW_H + 12,
+    justifyContent: 'center',
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
 });

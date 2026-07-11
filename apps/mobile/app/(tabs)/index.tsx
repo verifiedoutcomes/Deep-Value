@@ -84,8 +84,11 @@ function WatchRow({ ticker }: { ticker: string }) {
   );
 }
 
+const ROW_HEIGHT = 56;
+
 export default function WatchlistScreen() {
   const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<'added' | 'az'>('added');
   const watchlist = useAppStore((s) => s.watchlist);
   const addToWatchlist = useAppStore((s) => s.addToWatchlist);
   const search = useTickerSearch(query);
@@ -93,17 +96,31 @@ export default function WatchlistScreen() {
   const addManual = () => {
     const t = query.trim().toUpperCase();
     if (/^[A-Z.\-]{1,10}$/.test(t)) {
+      tapHaptic();
       addToWatchlist(t);
       setQuery('');
     }
   };
+
+  // The search box doubles as a watchlist filter, so a list of thousands
+  // of names narrows as you type; new symbols come from provider search
+  // or direct entry.
+  const q = query.trim().toUpperCase();
+  const visible = useMemo(() => {
+    const filtered = q ? watchlist.filter((t) => t.includes(q)) : [...watchlist];
+    if (sort === 'az') filtered.sort();
+    return filtered;
+  }, [watchlist, q, sort]);
+  const newResults = (search.data ?? [])
+    .filter((r) => !watchlist.includes(r.ticker))
+    .slice(0, 5);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={styles.searchWrap}>
         <TextInput
           style={styles.search}
-          placeholder="search ticker…"
+          placeholder="search or filter tickers…"
           placeholderTextColor={colors.textFaint}
           autoCapitalize="characters"
           autoCorrect={false}
@@ -112,42 +129,64 @@ export default function WatchlistScreen() {
           onSubmitEditing={addManual}
           returnKeyType="done"
         />
+        <Pressable
+          style={styles.gear}
+          onPress={() => {
+            tapHaptic();
+            setSort((s) => (s === 'added' ? 'az' : 'added'));
+          }}
+          accessibilityLabel={`sort ${sort === 'added' ? 'alphabetically' : 'by date added'}`}
+        >
+          <Mono size="sm" color={sort === 'az' ? colors.accent : colors.textDim}>A–Z</Mono>
+        </Pressable>
         <Link href="/settings" asChild>
           <Pressable style={styles.gear}>
             <Mono size="lg" color={colors.textDim}>⚙</Mono>
           </Pressable>
         </Link>
       </View>
-      {query.length > 0 && (
+      {q.length > 0 && (
         <View style={styles.results}>
-          {(search.data ?? []).slice(0, 6).map((r) => (
+          {newResults.map((r) => (
             <Pressable
               key={r.ticker}
               style={styles.resultRow}
               onPress={() => {
+                tapHaptic();
                 addToWatchlist(r.ticker);
                 setQuery('');
               }}
             >
-              <Mono size="sm">{r.ticker}</Mono>
+              <Mono size="sm">+ {r.ticker}</Mono>
               <Mono size="xs" color={colors.textFaint}>{r.exchange}</Mono>
             </Pressable>
           ))}
-          <Pressable style={styles.resultRow} onPress={addManual}>
-            <Mono size="sm" color={colors.accent}>
-              add "{query.trim().toUpperCase()}" directly
-            </Mono>
-          </Pressable>
+          {!watchlist.includes(q) && /^[A-Z.\-]{1,10}$/.test(q) && (
+            <Pressable style={styles.resultRow} onPress={addManual}>
+              <Mono size="sm" color={colors.accent}>add "{q}" to watchlist</Mono>
+            </Pressable>
+          )}
         </View>
       )}
       <FlatList
-        data={watchlist}
+        data={visible}
         keyExtractor={(t) => t}
         renderItem={({ item }) => <WatchRow ticker={item} />}
         contentContainerStyle={{ paddingBottom: space.xl }}
+        getItemLayout={(_d, index) => ({
+          length: ROW_HEIGHT,
+          offset: ROW_HEIGHT * index,
+          index,
+        })}
+        initialNumToRender={14}
+        windowSize={7}
+        removeClippedSubviews
+        keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Mono size="sm" color={colors.textDim}>Watchlist is empty.</Mono>
+            <Mono size="sm" color={colors.textDim}>
+              {q ? `Nothing on the watchlist matches "${q}".` : 'Watchlist is empty.'}
+            </Mono>
             <Mono size="xs" color={colors.textFaint}>
               Search above, or type a ticker and hit return. Long-press a row to remove it.
             </Mono>
@@ -199,7 +238,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: space.md,
-    paddingVertical: 10,
+    height: 56,
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 4,

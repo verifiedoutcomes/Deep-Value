@@ -1,8 +1,17 @@
 /**
- * Valuation screen: scenario editor (5yr/3yr toggle, Bear/Base/Bull tabs,
- * per-year inputs for growth and margins, exit multiple, discount rate,
- * adjustment), fair value + IRR results, IRR-at-price strip, margin of
- * safety targets, verdict card.
+ * Valuation screen — the heart of the app, laid out as the sheet is:
+ *
+ *  - scenario tabs (Bear/Base/Bull) and 5yr/3yr toggle
+ *  - fair value / IRR / price Δ results
+ *  - the forecast block exactly like sheet rows 61:67 — one row per year
+ *    with Revenue, Y/Y Δ (editable), Op Income, Op Margin (editable),
+ *    Adj FCF Margin (editable), Adj FCF and PV of Adj FCF
+ *  - terminal inputs (exit multiple, discount rate, adjustment)
+ *  - IRR-at-price strip, margin of safety, verdict
+ *
+ * Every computed number carries an (i) tag that opens the formula with
+ * live values substituted, so the whole calculation can be followed from
+ * TTM revenue to fair value.
  */
 import React from 'react';
 import {
@@ -20,6 +29,7 @@ import type {
   ScenarioKind,
   ScenarioOverrides,
   ScenarioValuation,
+  ValuationAnchors,
 } from '@dvh/engine';
 import {
   DEFAULT_DISCOUNT_RATE,
@@ -32,7 +42,18 @@ import { useTickerAnalysis } from '../../src/analysis';
 import { useAppStore } from '../../src/store';
 import { tapHaptic, toggleHaptic } from '../../src/haptics';
 import { colors, deltaColor, space, type } from '../../src/theme';
-import { Banner, Card, Chip, KV, Mono, SectionTitle } from '../../src/components/ui';
+import { Banner, Card, Chip, Mono, SectionTitle } from '../../src/components/ui';
+import { FormulaProvider, InfoTag } from '../../src/components/FormulaInfo';
+import {
+  adjFcfMarginFormula,
+  exitMultipleFormula,
+  fairValueFormula,
+  forecastRevenueFormula,
+  irrFormula,
+  irrStripFormula,
+  pvOfFcfFormula,
+  targetBuyFormula,
+} from '../../src/formulas';
 import { money, pct, pctSigned, price } from '../../src/format';
 
 export default function ValuationScreen() {
@@ -54,6 +75,7 @@ export default function ValuationScreen() {
   const kind = state.scenarioTab;
   const overrides = state.overrides;
   const valuation = analysis.scenarios[kind][horizon];
+  const anchors = analysis.anchors;
   const seededExit5 = analysis.derived[analysis.derived.length - 1]?.evToEbit ?? 0;
 
   const years =
@@ -62,7 +84,11 @@ export default function ValuationScreen() {
 
   const patch = (p: Partial<ScenarioOverrides>) => setOverrides(ticker, { ...overrides, ...p });
 
-  const setYear = (idx: number, field: 'revenueYoY' | 'operatingMargin' | 'adjFcfMargin', v: number) => {
+  const setYear = (
+    idx: number,
+    field: 'revenueYoY' | 'operatingMargin' | 'adjFcfMargin',
+    v: number,
+  ) => {
     const next = years.map((y, i) => (i === idx ? { ...y, [field]: v } : y));
     patch({
       years: {
@@ -75,6 +101,7 @@ export default function ValuationScreen() {
   const exit5 = overrides.exitMultiple5?.[kind] ?? (kind === 'base' ? seededExit5 : 0);
   const exitCurrent =
     horizon === 5 ? exit5 : overrides.exitMultiple3?.[kind] ?? derive3yExitMultiple(kind, exit5);
+  const fcfRate = overrides.discountRate5 ?? DEFAULT_DISCOUNT_RATE;
 
   const hasEdits =
     overrides.years?.[kind]?.[horizon] != null ||
@@ -85,13 +112,13 @@ export default function ValuationScreen() {
 
   const resetToSeeded = () => {
     toggleHaptic();
-    const years = { ...overrides.years?.[kind] };
-    delete years[horizon];
+    const yearsCopy = { ...overrides.years?.[kind] };
+    delete yearsCopy[horizon];
     const adj = { ...overrides.adjustmentMillions?.[kind] };
     delete adj[horizon];
     const next = {
       ...overrides,
-      years: { ...overrides.years, [kind]: years },
+      years: { ...overrides.years, [kind]: yearsCopy },
       adjustmentMillions: { ...overrides.adjustmentMillions, [kind]: adj },
     };
     if (horizon === 5) {
@@ -106,7 +133,10 @@ export default function ValuationScreen() {
     setOverrides(ticker, next);
   };
 
+  const finalYear = anchors.firstForecastYear + horizon - 1;
+
   return (
+    <FormulaProvider>
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -147,12 +177,18 @@ export default function ValuationScreen() {
         </View>
       </View>
 
-      <ResultCard valuation={valuation} priceToday={snapshot.quote.price} horizon={horizon} />
+      <ResultCard
+        valuation={valuation}
+        anchors={anchors}
+        horizon={horizon}
+        priceToday={snapshot.quote.price}
+      />
 
-      <Card>
-        <View style={styles.assumTitleRow}>
+      {/* ---- the sheet's forecast block (rows 61:67 / 86:92) ---- */}
+      <Card style={{ paddingHorizontal: 0 }}>
+        <View style={[styles.assumTitleRow, { paddingHorizontal: space.md }]}>
           <SectionTitle>
-            Assumptions · {kind} · {horizon}yr
+            {horizon}-year {finalYear} forecast · {kind}
           </SectionTitle>
           {hasEdits && (
             <Pressable onPress={resetToSeeded} hitSlop={8}>
@@ -160,25 +196,29 @@ export default function ValuationScreen() {
             </Pressable>
           )}
         </View>
-        <View style={styles.assumHead}>
-          <Mono size="xs" color={colors.textFaint}>year</Mono>
-          <Mono size="xs" color={colors.textFaint}>rev y/y %</Mono>
-          <Mono size="xs" color={colors.textFaint}>op mgn %</Mono>
-          <Mono size="xs" color={colors.textFaint}>fcf mgn %</Mono>
+        <ForecastTable
+          valuation={valuation}
+          anchors={anchors}
+          years={years}
+          fcfRate={fcfRate}
+          setYear={setYear}
+        />
+        <View style={{ paddingHorizontal: space.md }}>
+          <Mono size="xs" color={colors.textFaint}>
+            boxed cells are yours to edit · tap ⓘ to follow any calculation
+            {capexTreatment === 'sheet' ? ' · Adj FCF = OCF + |capex| − SBC (sheet default)' : ''}
+          </Mono>
         </View>
-        {years.map((y, i) => (
-          <View key={i} style={styles.assumRow}>
-            <Mono size="sm" color={colors.textDim}>{analysis.anchors.firstForecastYear + i}</Mono>
-            <PctInput value={y.revenueYoY} onCommit={(v) => setYear(i, 'revenueYoY', v)} />
-            <PctInput value={y.operatingMargin} onCommit={(v) => setYear(i, 'operatingMargin', v)} />
-            <PctInput value={y.adjFcfMargin} onCommit={(v) => setYear(i, 'adjFcfMargin', v)} />
-          </View>
-        ))}
-        <View style={{ height: space.sm }} />
+      </Card>
+
+      {/* ---- terminal inputs (sheet N61:N66 block) ---- */}
+      <Card>
+        <SectionTitle>Terminal value inputs</SectionTitle>
         <NumRow
-          label={`exit EV/EBIT (${horizon}yr)`}
+          label={`exit EV/EBIT at ${finalYear}`}
           value={exitCurrent}
           digits={1}
+          info={() => exitMultipleFormula(horizon, kind, exitCurrent, seededExit5)}
           onCommit={(v) =>
             horizon === 5
               ? patch({ exitMultiple5: { ...overrides.exitMultiple5, [kind]: v } })
@@ -205,11 +245,6 @@ export default function ValuationScreen() {
             })
           }
         />
-        {capexTreatment === 'sheet' && (
-          <Mono size="xs" color={colors.textFaint}>
-            note: Adj FCF uses the sheet convention (OCF + |capex| − SBC)
-          </Mono>
-        )}
       </Card>
 
       <Card>
@@ -218,12 +253,19 @@ export default function ValuationScreen() {
           {analysis.irrStrip.map((cell) => {
             const isCurrent = Math.abs(cell.price - Math.round(snapshot.quote.price)) < 0.5;
             return (
-              <View key={cell.price} style={[styles.irrCell, isCurrent && styles.irrCellActive]}>
-                <Mono size="sm" bold color={isCurrent ? colors.accent : colors.text}>
-                  {price(cell.price).replace('.00', '')}
-                </Mono>
+              <Pressable
+                key={cell.price}
+                style={[styles.irrCell, isCurrent && styles.irrCellActive]}
+                onPress={() => {}}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Mono size="sm" bold color={isCurrent ? colors.accent : colors.text}>
+                    {price(cell.price).replace('.00', '')}
+                  </Mono>
+                  <InfoTag spec={() => irrStripFormula(cell.price, anchors, cell.irr)} />
+                </View>
                 <Mono size="xs" color={deltaColor(cell.irr)}>{pct(cell.irr)}</Mono>
-              </View>
+              </Pressable>
             );
           })}
         </ScrollView>
@@ -241,9 +283,20 @@ export default function ValuationScreen() {
                 patch({ mosThresholds: t });
               }}
             />
-            <Mono size="sm" color={colors.accent} bold>
-              {price(row.targetBuyPrice)}
-            </Mono>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Mono size="sm" color={colors.accent} bold>
+                {price(row.targetBuyPrice)}
+              </Mono>
+              <InfoTag
+                spec={() =>
+                  targetBuyFormula(
+                    row.threshold,
+                    analysis.verdict.baseFairValue,
+                    row.targetBuyPrice,
+                  )
+                }
+              />
+            </View>
           </View>
         ))}
       </Card>
@@ -260,7 +313,11 @@ export default function ValuationScreen() {
           ).map(([label, fv]) => (
             <View key={label} style={styles.verdictCell}>
               <Mono size="xs" color={colors.textFaint}>{label}</Mono>
-              <Mono size="md" bold color={fv == null ? colors.textFaint : fv >= snapshot.quote.price ? colors.accent : colors.red}>
+              <Mono
+                size="md"
+                bold
+                color={fv == null ? colors.textFaint : fv >= snapshot.quote.price ? colors.accent : colors.red}
+              >
                 {fv == null ? 'No Forecast' : price(fv)}
               </Mono>
               <Mono size="xs" color={colors.textDim}>vs {price(analysis.verdict.price)}</Mono>
@@ -270,17 +327,22 @@ export default function ValuationScreen() {
       </Card>
     </ScrollView>
     </KeyboardAvoidingView>
+    </FormulaProvider>
   );
 }
 
+/* ---------------- results ---------------- */
+
 function ResultCard({
   valuation,
-  priceToday,
+  anchors,
   horizon,
+  priceToday,
 }: {
   valuation: ScenarioValuation;
-  priceToday: number;
+  anchors: ValuationAnchors;
   horizon: HorizonYears;
+  priceToday: number;
 }) {
   if (valuation.status === 'no-forecast') {
     return (
@@ -298,35 +360,202 @@ function ResultCard({
       <View style={styles.resultRow}>
         <View>
           <Mono size="xs" color={colors.textFaint}>fair value today</Mono>
-          <Mono size="xl" bold color={err ? colors.red : colors.accent}>
-            {err ? '#NUM!' : price(valuation.fairValuePerShare)}
-          </Mono>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Mono size="xl" bold color={err ? colors.red : colors.accent}>
+              {err ? '#NUM!' : price(valuation.fairValuePerShare)}
+            </Mono>
+            {!err && <InfoTag spec={() => fairValueFormula(valuation, anchors, horizon)} />}
+          </View>
           <Mono size="xs" color={deltaColor(valuation.priceDelta)}>
-            {err ? 'no IRR root' : `${pctSigned(valuation.priceDelta)} vs ${price(priceToday)}`}
+            {err ? 'no IRR root — check the assumptions' : `${pctSigned(valuation.priceDelta)} vs ${price(priceToday)}`}
           </Mono>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <Mono size="xs" color={colors.textFaint}>irr</Mono>
-          <Mono size="xl" bold color={err ? colors.red : colors.text}>
-            {err ? '–' : pct(valuation.irr)}
-          </Mono>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Mono size="xl" bold color={err ? colors.red : colors.text}>
+              {err ? '–' : pct(valuation.irr)}
+            </Mono>
+            {!err && <InfoTag spec={() => irrFormula(valuation, anchors, horizon)} />}
+          </View>
           <Mono size="xs" color={colors.textDim}>
             {`${horizon}-yr px Δ ${pctSigned(valuation.horizonPriceChange, 0)}`}
           </Mono>
         </View>
       </View>
-      <View style={{ height: space.sm }} />
-      <KV label={`terminal EV (${valuation.exitMultiple.toFixed(1)}x ebit)`} value={money(valuation.terminalEv)} />
-      <KV label="terminal mkt cap" value={money(valuation.terminalMarketCap)} />
-      <KV label="intrinsic equity value" value={money(valuation.intrinsicValue)} />
     </Card>
   );
 }
 
-/**
- * Percent input with ± steppers (0.5pp per tap): editable by keyboard,
- * but tunable one-thumbed without one.
- */
+/* ---------------- the sheet-like forecast table ---------------- */
+
+const FROW_H = 34;
+
+function ForecastTable({
+  valuation,
+  anchors,
+  years,
+  fcfRate,
+  setYear,
+}: {
+  valuation: ScenarioValuation;
+  anchors: ValuationAnchors;
+  years: { revenueYoY: number; operatingMargin: number; adjFcfMargin: number }[];
+  fcfRate: number;
+  setYear: (idx: number, f: 'revenueYoY' | 'operatingMargin' | 'adjFcfMargin', v: number) => void;
+}) {
+  const f = valuation.forecast;
+  return (
+    <View style={{ flexDirection: 'row', marginBottom: space.sm }}>
+      <View style={styles.fyearCol}>
+        <View style={styles.fhead}><Mono size="xs" color={colors.textFaint}> </Mono></View>
+        {f.map((row) => (
+          <View key={row.year} style={styles.frow}>
+            <Mono size="xs" color={colors.textDim} bold>{row.year}</Mono>
+          </View>
+        ))}
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        {/* Rev Y/Y — editable */}
+        <FCol title="Rev Y/Y ∆" editable>
+          {f.map((row, t) => (
+            <View key={t} style={styles.frow}>
+              <MiniPct value={years[t]!.revenueYoY} onCommit={(v) => setYear(t, 'revenueYoY', v)} />
+            </View>
+          ))}
+        </FCol>
+        {/* Revenue — computed */}
+        <FCol title="Revenue">
+          {f.map((row, t) => (
+            <View key={t} style={[styles.frow, styles.fcomputed]}>
+              <Mono size="xs">{money(row.revenue)}</Mono>
+              <InfoTag
+                spec={() =>
+                  forecastRevenueFormula(
+                    row.year,
+                    t === 0 ? anchors.ttmRevenue : f[t - 1]!.revenue,
+                    row.revenueYoY,
+                    row.revenue,
+                    t === 0,
+                  )
+                }
+              />
+            </View>
+          ))}
+        </FCol>
+        {/* Op margin — editable */}
+        <FCol title="Op Margin" editable>
+          {f.map((_row, t) => (
+            <View key={t} style={styles.frow}>
+              <MiniPct
+                value={years[t]!.operatingMargin}
+                onCommit={(v) => setYear(t, 'operatingMargin', v)}
+              />
+            </View>
+          ))}
+        </FCol>
+        {/* Op income — computed */}
+        <FCol title="Op Income">
+          {f.map((row, t) => (
+            <View key={t} style={[styles.frow, styles.fcomputed]}>
+              <Mono size="xs">{money(row.operatingIncome)}</Mono>
+            </View>
+          ))}
+        </FCol>
+        {/* FCF margin — editable */}
+        <FCol title="Adj FCF Mgn" editable>
+          {f.map((_row, t) => (
+            <View key={t} style={styles.frow}>
+              <MiniPct
+                value={years[t]!.adjFcfMargin}
+                onCommit={(v) => setYear(t, 'adjFcfMargin', v)}
+              />
+            </View>
+          ))}
+        </FCol>
+        {/* Adj FCF — computed */}
+        <FCol title="Adj FCF">
+          {f.map((row, t) => (
+            <View key={t} style={[styles.frow, styles.fcomputed]}>
+              <Mono size="xs">{money(row.adjFcf)}</Mono>
+              <InfoTag
+                spec={() => adjFcfMarginFormula(row.year, row.revenue, row.adjFcfMargin, row.adjFcf)}
+              />
+            </View>
+          ))}
+        </FCol>
+        {/* PV of FCF — computed */}
+        <FCol title="PV of Adj FCF">
+          {f.map((row, t) => (
+            <View key={t} style={[styles.frow, styles.fcomputed]}>
+              <Mono size="xs" color={colors.blue}>{money(row.pvOfAdjFcf)}</Mono>
+              <InfoTag
+                spec={() => pvOfFcfFormula(row.year, t, row.adjFcf, fcfRate, row.pvOfAdjFcf)}
+              />
+            </View>
+          ))}
+        </FCol>
+      </ScrollView>
+    </View>
+  );
+}
+
+function FCol({
+  title,
+  editable = false,
+  children,
+}: {
+  title: string;
+  editable?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.fcol}>
+      <View style={styles.fhead}>
+        <Mono size="xs" color={editable ? colors.amber : colors.textDim}>
+          {title}
+          {editable ? ' ✎' : ''}
+        </Mono>
+      </View>
+      {children}
+    </View>
+  );
+}
+
+/** Compact percent editor for forecast cells (tap to type, ± steppers). */
+function MiniPct({ value, onCommit }: { value: number; onCommit: (v: number) => void }) {
+  const [text, setText] = React.useState((value * 100).toFixed(1));
+  React.useEffect(() => setText((value * 100).toFixed(1)), [value]);
+  const bump = (dir: 1 | -1) => {
+    tapHaptic();
+    onCommit(Math.round((value + dir * 0.005) * 1000) / 1000);
+  };
+  return (
+    <View style={styles.mini}>
+      <Pressable onPress={() => bump(-1)} hitSlop={6} style={styles.miniBtn}>
+        <Mono size="xs" color={colors.textDim}>−</Mono>
+      </Pressable>
+      <TextInput
+        style={styles.miniInput}
+        value={text}
+        keyboardType="numbers-and-punctuation"
+        onChangeText={setText}
+        selectTextOnFocus
+        onEndEditing={() => {
+          const v = parseFloat(text);
+          if (Number.isFinite(v)) onCommit(v / 100);
+          else setText((value * 100).toFixed(1));
+        }}
+      />
+      <Pressable onPress={() => bump(1)} hitSlop={6} style={styles.miniBtn}>
+        <Mono size="xs" color={colors.textDim}>+</Mono>
+      </Pressable>
+    </View>
+  );
+}
+
+/* ---------------- shared inputs ---------------- */
+
 function PctInput({ value, onCommit }: { value: number; onCommit: (v: number) => void }) {
   const [text, setText] = React.useState((value * 100).toFixed(1));
   React.useEffect(() => setText((value * 100).toFixed(1)), [value]);
@@ -364,18 +593,23 @@ function NumRow({
   digits,
   scale = 1,
   onCommit,
+  info,
 }: {
   label: string;
   value: number;
   digits: number;
   scale?: number;
   onCommit: (v: number) => void;
+  info?: () => import('../../src/formulas').FormulaSpec;
 }) {
   const [text, setText] = React.useState((value * scale).toFixed(digits));
   React.useEffect(() => setText((value * scale).toFixed(digits)), [value, scale, digits]);
   return (
     <View style={styles.numRow}>
-      <Mono size="sm" color={colors.textDim}>{label}</Mono>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Mono size="sm" color={colors.textDim}>{label}</Mono>
+        {info && <InfoTag spec={info} />}
+      </View>
       <TextInput
         style={styles.input}
         value={text}
@@ -400,17 +634,52 @@ const styles = StyleSheet.create({
     paddingTop: space.sm,
   },
   resultRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  assumHead: {
+  assumTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    alignItems: 'flex-start',
   },
-  assumRow: {
+  /* forecast table */
+  fyearCol: {
+    width: 46,
+    flexShrink: 0,
+    paddingLeft: space.md,
+    borderRightColor: colors.border,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    marginRight: space.sm,
+  },
+  fcol: { width: 108, paddingRight: space.sm },
+  fhead: { height: 20, justifyContent: 'center' },
+  frow: {
+    height: FROW_H,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
   },
+  fcomputed: { justifyContent: 'flex-start' },
+  mini: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderColor: colors.amber,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  miniBtn: {
+    backgroundColor: colors.chipBg,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+  },
+  miniInput: {
+    backgroundColor: colors.surfaceAlt,
+    color: colors.text,
+    fontFamily: type.mono,
+    fontSize: type.size.xs,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    minWidth: 42,
+    textAlign: 'right',
+  },
+  /* shared inputs */
   input: {
     backgroundColor: colors.surfaceAlt,
     borderColor: colors.border,
@@ -423,11 +692,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     minWidth: 72,
     textAlign: 'right',
-  },
-  assumTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
   },
   stepper: {
     flexDirection: 'row',

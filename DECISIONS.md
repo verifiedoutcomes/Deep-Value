@@ -191,7 +191,36 @@ disagreed, **the file won**; those cases are called out explicitly.
     for VoiceOver; haptic feedback (expo-haptics) on toggles, pins,
     steppers and refresh outcomes.
 
-28. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+28. **Sheet-faithful valuation layout + formula transparency (2026-07-11).**
+    The valuation tab now renders the forecast block exactly as sheet rows
+    61:67: one row per year with Revenue, Y/Y Δ (editable), Op Income,
+    Op Margin (editable), Adj FCF Margin (editable), Adj FCF and PV of
+    Adj FCF; terminal EV / terminal market cap / intrinsic-value display
+    lines were removed at the owner's request. In their place, every
+    computed number carries an ⓘ tag opening a card with the sheet cell
+    reference, the formula, and the formula again with live numbers
+    substituted (src/formulas.ts + FormulaInfo component) — the model is
+    auditable from TTM revenue to fair value without leaving the app.
+
+29. **Full historical table, aligned and grouped (2026-07-11).** All 24
+    sheet columns (D..AB incl. the Z/AA/AB income-split waterfall
+    components) render in the Company table; headers (title + sparkline)
+    share each column's right edge with the numbers below; group chips
+    (All / P&L / Cash Flow / Balance & Val / Income Split) split the table
+    for phone reading.
+
+30. **Editable checklist (2026-07-11).** Checklist items became per-ticker
+    data seeded from the 14 baseline questions: add unlimited questions,
+    long-press-remove any item, restore the baseline set. Persisted-state
+    schema bumped to v2 with a migration from the boolean[] shape.
+
+31. **Watchlist at scale (2026-07-11).** The search box doubles as a live
+    filter over the watchlist; A–Z/added sort toggle; fixed row heights
+    with getItemLayout + windowed rendering so thousands of tickers
+    scroll flat. Per-row engine runs stay memoised and virtualized, so
+    cost tracks visible rows, not list size.
+
+32. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.
