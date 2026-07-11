@@ -285,7 +285,19 @@ disagreed, **the file won**; those cases are called out explicitly.
     history. MSFT passed with plausible values (P/E 22.8, EV/EBIT 19.8,
     op margin 46.8%, ROIC 21.6%).
 
-40. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+40. **Saved analyses (2026-07-11).** "⌸ save analysis" on the Company or
+    Valuation tab freezes the complete state behind BOTH tabs — the data
+    snapshot, all scenario overrides, capex treatment, horizon and
+    scenario tab — plus a digest of headline results. Because the engine
+    is pure, replaying those frozen inputs reproduces every original
+    number exactly, so a saved analysis is revisited bit-for-bit rather
+    than re-rendered from stored screenshots. Review mode is read-only
+    (refresh disabled, edits ignored) with an amber banner; the /saved
+    list shows then-price vs fair value/IRR digests; saving offers a
+    one-tap "Research next ticker →" that lands on the Watchlist with
+    the search box focused. Capped at 200 entries, newest first.
+
+41. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.
