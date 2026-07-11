@@ -48,6 +48,18 @@ export function symbolFor(ticker: string): SymbolRef {
 }
 
 export async function pullSnapshot(ticker: string): Promise<CompanySnapshot> {
+  const proxy = proxyBaseUrl();
+  if (proxy) {
+    // One request per company open: the proxy assembles and caches the
+    // whole snapshot, so upstream provider cost is per-ticker, not
+    // per-user, and no API key exists anywhere near the client.
+    const res = await fetch(
+      `${proxy.replace(/\/$/, '')}/bundle/${encodeURIComponent(ticker.toUpperCase())}`,
+    );
+    if (!res.ok) throw new Error(`bundle ${ticker}: HTTP ${res.status}`);
+    return (await res.json()) as CompanySnapshot;
+  }
+  // Dev fallback: assemble client-side straight from FMP with the dev key.
   return loadCompanySnapshot(makeProvider(), symbolFor(ticker), new UsdOnlyFxTable());
 }
 

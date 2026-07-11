@@ -254,7 +254,38 @@ disagreed, **the file won**; those cases are called out explicitly.
     present — App Review 4.8). The persisted store is already one
     serializable JSON document, so a sync layer bolts on cleanly.
 
-37. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+37. **Scaling economics: the /bundle endpoint (2026-07-11).** A company
+    open now costs the client exactly ONE request: GET /bundle/:ticker
+    returns the fully assembled CompanySnapshot, built server-side and
+    cached 15 minutes in KV. Upstream provider calls (~10 per assembly)
+    are therefore paid per TICKER per cache window across the whole user
+    base, not per user — marginal data cost per additional user ≈ 0.
+    End users never see or hold an API key.
+
+38. **Data plan for launch (researched 2026-07-11).** FMP Starter caps
+    history at 5 years, so the model's 2007+ table needs FMP Premium
+    ($99/mo, ~$69/mo annual; 750 calls/min, 30y history) — trivially
+    sufficient behind the bundle cache. HOWEVER: FMP's standard-plan ToS
+    prohibits displaying/redistributing data to app end users; a Data
+    Display licensing agreement (enterprise, quote required) is needed
+    before public sale. License-clean fallback architecture is already in
+    the codebase: SEC EDGAR XBRL (public domain) for statements + a
+    display-licensed price/quote source, with per-year market cap
+    computed as year-end price × shares. EODHD's fundamentals feed
+    (€59.99/mo) is the nearest like-for-like vendor alternative but also
+    requires its commercial/redistribution tier for app display. Action
+    before App Store launch: get FMP's display-license quote and compare
+    with the EDGAR-first build-out.
+
+39. **MSFT live validation (2026-07-11).** live-smoke.integration.test.ts
+    pulls any ticker (default MSFT) through the real pipeline and asserts
+    the ticker-agnostic engine invariants: K = H − I − J, Q53 = P53 + M53,
+    seeded base-case forecast/IRR compute, bear/bull "No Forecast", IRR
+    strip centred on round(price), 52-week range and momentum from price
+    history. MSFT passed with plausible values (P/E 22.8, EV/EBIT 19.8,
+    op margin 46.8%, ROIC 21.6%).
+
+40. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.

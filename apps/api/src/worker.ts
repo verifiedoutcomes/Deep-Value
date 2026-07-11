@@ -17,9 +17,14 @@
  *  - GET-only, hardened response headers, upstream errors never cached.
  *
  * Routes:
+ *   /bundle/<TICKER>                 -> full CompanySnapshot JSON, ONE call
+ *                                       per company open; assembled server-
+ *                                       side and cached so upstream cost is
+ *                                       per-ticker, not per-user
  *   /fmp/stable/<endpoint>?...       -> financialmodelingprep.com (allowlisted)
  *   /edgar/companyfacts/<TICKER>     -> SEC EDGAR XBRL company facts (free fallback)
  */
+import { FmpProvider, UsdOnlyFxTable, loadCompanySnapshot } from '@dvh/data';
 export interface Env {
   FMP_API_KEY: string;
   CACHE: KVNamespace;
@@ -163,6 +168,36 @@ function handleFmp(env: Env, url: URL): Promise<Response> | Response {
   return cachedFetch(env, cacheKey, rule.ttl, () => fetch(upstream.toString()));
 }
 
+/**
+ * The scaling endpoint: assembles the complete CompanySnapshot (quote,
+ * 2007+ fundamentals, ownership, weekly prices) server-side and caches
+ * the result. A company open costs the client ONE request; the ~10
+ * upstream FMP calls behind a cache miss are paid at most once per
+ * ticker per BUNDLE_TTL across the entire user base.
+ */
+const BUNDLE_TTL = 15 * 60; // quote freshness bound; fundamentals barely move
+
+async function handleBundle(env: Env, ticker: string): Promise<Response> {
+  return cachedFetch(env, `bundle:${ticker}`, BUNDLE_TTL, async () => {
+    const provider = new FmpProvider({
+      baseUrl: FMP_ORIGIN,
+      apiKey: env.FMP_API_KEY,
+    });
+    try {
+      const snapshot = await loadCompanySnapshot(
+        provider,
+        { ticker, exchange: 'US', reportingCurrency: 'USD' },
+        new UsdOnlyFxTable(),
+      );
+      return new Response(JSON.stringify(snapshot), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: String(e) }), { status: 502 });
+    }
+  });
+}
+
 async function handleEdgar(env: Env, ticker: string): Promise<Response> {
   return cachedFetch(env, `edgar:companyfacts:${ticker}`, LONG_TTL, async () => {
     const mapRes = await cachedFetch(env, 'edgar:tickermap', LONG_TTL, () =>
@@ -193,6 +228,10 @@ export default {
     }
 
     const url = new URL(request.url);
+    const bundleMatch = url.pathname.match(/^\/bundle\/([A-Za-z0-9.\-]{1,10})$/);
+    if (bundleMatch) {
+      return handleBundle(env, bundleMatch[1]!.toUpperCase());
+    }
     if (url.pathname.startsWith('/fmp/stable/')) {
       return handleFmp(env, url);
     }
