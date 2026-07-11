@@ -5,18 +5,21 @@
  */
 import React from 'react';
 import {
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   View,
   useWindowDimensions,
 } from 'react-native';
+import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 import type { DerivedRow, HistoricalRowInput, Maybe, SummaryStats } from '@dvh/engine';
 import { momentumFromHistory, sparklineWindow } from '@dvh/engine';
 import { useTickerAnalysis } from '../../src/analysis';
 import { useRefreshSnapshot } from '../../src/data';
 import { useAppStore, BUNDLED_META } from '../../src/store';
-import { colors, deltaColor, space } from '../../src/theme';
+import { colors, deltaColor, space, type } from '../../src/theme';
+import { tapHaptic } from '../../src/haptics';
 import { Banner, Card, Chip, KV, Mono, SectionTitle } from '../../src/components/ui';
 import { PriceChart } from '../../src/components/PriceChart';
 import { Sparkline } from '../../src/components/Sparkline';
@@ -175,6 +178,9 @@ export default function CompanyScreen() {
           <SectionTitle>
             Historical Data{capexTreatment === 'sheet' ? '  ·  Adj FCF = OCF + |capex| − SBC (sheet default)' : ''}
           </SectionTitle>
+          <Mono size="xs" color={colors.textFaint}>
+            tap a column header to chart that metric
+          </Mono>
         </View>
         <HistoryTable snapshotRows={snapshot.rows} derived={analysis.derived} summary={analysis.summary} />
       </Card>
@@ -193,6 +199,110 @@ function OwnCell({ label, value, v }: { label: string; value: string; v?: Maybe 
   );
 }
 
+/**
+ * Full-width single-metric history chart (tap a column header to open).
+ * Tap a bar to read its exact value; 10Y/All period toggle.
+ */
+function MetricChart({
+  col,
+  snapshotRows,
+  derived,
+  width,
+  onClose,
+}: {
+  col: ColumnSpec;
+  snapshotRows: HistoricalRowInput[];
+  derived: DerivedRow[];
+  width: number;
+  onClose: () => void;
+}) {
+  const [period, setPeriod] = React.useState<'10y' | 'all'>('10y');
+  const all = snapshotRows.map((r, i) => ({
+    label: String(r.yearLabel),
+    value: col.value(r, derived[i]!),
+  }));
+  const data = period === '10y' ? all.slice(Math.max(0, all.length - 11)) : all;
+  const [selected, setSelected] = React.useState(data.length - 1);
+  React.useEffect(() => setSelected(data.length - 1), [period, data.length]);
+
+  const H = 150;
+  const nums = data.map((d) => (typeof d.value === 'number' ? d.value : 0));
+  const min = Math.min(...nums, 0);
+  const max = Math.max(...nums, 0);
+  const range = max - min || 1;
+  const barW = width / data.length;
+  const zeroY = H - 18 - ((0 - min) / range) * (H - 26);
+  const y = (v: number) => H - 18 - ((v - min) / range) * (H - 26);
+  const sel = data[Math.min(selected, data.length - 1)];
+
+  return (
+    <View style={{ paddingHorizontal: space.md, marginBottom: space.sm }}>
+      <View style={metricStyles.head}>
+        <View>
+          <Mono size="sm" bold>{col.title}</Mono>
+          <Mono size="xs" color={colors.accent}>
+            {sel ? `${sel.label} · ${col.fmt(sel.value)}` : ''}
+          </Mono>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 4 }}>
+          <Chip label="10Y" active={period === '10y'} onPress={() => setPeriod('10y')} />
+          <Chip label="All" active={period === 'all'} onPress={() => setPeriod('all')} />
+          <Chip label="✕" onPress={onClose} />
+        </View>
+      </View>
+      <Svg width={width} height={H}>
+        {data.map((d, i) => {
+          const v = typeof d.value === 'number' ? d.value : 0;
+          const top = Math.min(y(v), zeroY);
+          const h = Math.max(Math.abs(zeroY - y(v)), 1);
+          const isSel = i === selected;
+          const isTTM = d.label === 'TTM';
+          return (
+            <Rect
+              key={i}
+              x={i * barW + 1.5}
+              y={top}
+              width={Math.max(barW - 3, 2)}
+              height={h}
+              rx={2}
+              fill={isSel ? colors.accent : isTTM ? colors.red : colors.blue}
+              opacity={isSel ? 1 : 0.85}
+              onPress={() => {
+                tapHaptic();
+                setSelected(i);
+              }}
+            />
+          );
+        })}
+        {data.map((d, i) =>
+          // sparse x labels: first, last and every ~4th
+          i === 0 || i === data.length - 1 || i % 4 === 0 ? (
+            <SvgText
+              key={`l${i}`}
+              x={i * barW + barW / 2}
+              y={H - 4}
+              fontSize={type.size.xs}
+              fill={colors.textFaint}
+              textAnchor="middle"
+            >
+              {d.label === 'TTM' ? 'TTM' : `'${d.label.slice(2)}`}
+            </SvgText>
+          ) : null,
+        )}
+      </Svg>
+    </View>
+  );
+}
+
+const metricStyles = StyleSheet.create({
+  head: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: space.xs,
+  },
+});
+
 function HistoryTable({
   snapshotRows,
   derived,
@@ -202,11 +312,15 @@ function HistoryTable({
   derived: DerivedRow[];
   summary: SummaryStats;
 }) {
+  const { width: screenWidth } = useWindowDimensions();
+  const [chartKey, setChartKey] = React.useState<string | null>(null);
   const [group, setGroup] = React.useState('all');
   const active = GROUPS.find((g) => g.key === group) ?? GROUPS[0]!;
   const cols = active.cols
     ? active.cols.map((k) => COLUMNS.find((c) => c.key === k)!).filter(Boolean)
     : COLUMNS;
+
+  const chartCol = chartKey ? COLUMNS.find((c) => c.key === chartKey) : null;
 
   return (
     <View>
@@ -219,6 +333,15 @@ function HistoryTable({
           <Chip key={g.key} label={g.label} active={group === g.key} onPress={() => setGroup(g.key)} />
         ))}
       </ScrollView>
+      {chartCol && (
+        <MetricChart
+          col={chartCol}
+          snapshotRows={snapshotRows}
+          derived={derived}
+          width={screenWidth - 4 * space.md}
+          onClose={() => setChartKey(null)}
+        />
+      )}
       <View style={{ flexDirection: 'row' }}>
         {/* pinned year column: header height matches data-column headers
             exactly so every row lines up across the whole table */}
@@ -244,11 +367,21 @@ function HistoryTable({
             return (
               <View key={col.key} style={styles.dataCol}>
                 {/* header: title and sparkline share the column's right edge
-                    with the numbers below, so everything aligns */}
-                <View style={styles.colHead}>
-                  <Mono size="xs" color={colors.textDim}>{col.title}</Mono>
+                    with the numbers below; tap to open the metric chart */}
+                <Pressable
+                  style={styles.colHead}
+                  onPress={() => {
+                    tapHaptic();
+                    setChartKey((k) => (k === col.key ? null : col.key));
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`chart ${col.title}`}
+                >
+                  <Mono size="xs" color={chartKey === col.key ? colors.accent : colors.textDim}>
+                    {col.title}
+                  </Mono>
                   <Sparkline values={sparklineWindow(values)} width={COL_W - 12} height={18} />
-                </View>
+                </Pressable>
                 {values.map((v, i) => (
                   <View key={i} style={[styles.cellRow, { alignItems: 'flex-end' }]}>
                     <Mono size="xs" color={i === values.length - 1 ? colors.text : colors.textDim}>

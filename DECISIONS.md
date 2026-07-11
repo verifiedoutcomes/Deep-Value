@@ -220,7 +220,41 @@ disagreed, **the file won**; those cases are called out explicitly.
     scroll flat. Per-row engine runs stay memoised and virtualized, so
     cost tracks visible rows, not list size.
 
-32. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+32. **Watchlist subcategories (2026-07-11).** The watchlist is now groups
+    of max 50 names each (`MAX_GROUP_SIZE`), with create/delete groups,
+    move-between-groups on long-press, per-group counts on the chips, and
+    a friendly error when a group is full. Persisted schema v3 migrates
+    the old flat list into 50-name chunks.
+
+33. **Metric history charts (2026-07-11).** Tapping any column header in
+    the Company table opens a full-width bar chart of that metric across
+    all years — tap a bar to read its exact value, 10Y/All period toggle,
+    TTM bar highlighted. Functionally inspired by per-metric charting in
+    modern research platforms (fiscal.ai et al.); implemented from
+    scratch with our own visual language — no assets, layouts or code
+    copied.
+
+34. **Dark-mode only, by design.** The app ships a single dark theme
+    (`userInterfaceStyle: "dark"`), chosen for the terminal-density
+    aesthetic and to halve the design/QA surface pre-launch. A light
+    theme can be added later purely in `src/theme.ts`.
+
+35. **Comprehensive legal disclaimer (2026-07-11).** Settings ends with a
+    collapsed "Legal · full investment disclaimer" section: ten sections
+    covering no-advice, no advisory relationship, hypothetical model
+    outputs (explicitly flagging the capex add-back convention), data
+    accuracy, risk of loss, no warranty, limitation of liability, user
+    responsibility, no tax/legal advice, third-party content. The short
+    banner above it remains always visible for App Store review.
+
+36. **Login deliberately deferred.** All state is on-device; nothing
+    requires an account yet. When sync/backup or paid tiers arrive, the
+    plan is Sign in with Apple + Google + email magic links only (Apple
+    requires offering Sign in with Apple whenever third-party logins are
+    present — App Review 4.8). The persisted store is already one
+    serializable JSON document, so a sync layer bolts on cleanly.
+
+37. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.

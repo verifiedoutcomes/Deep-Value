@@ -25,6 +25,14 @@ export interface ChecklistItem {
   answer: boolean;
 }
 
+/** A watchlist subcategory. Hard cap keeps lists scannable and fast. */
+export interface WatchlistGroup {
+  name: string;
+  tickers: string[];
+}
+
+export const MAX_GROUP_SIZE = 50;
+
 export interface TickerState {
   /** newest first; index 0 is the live view unless a pin is set */
   snapshots: CompanySnapshot[];
@@ -37,7 +45,9 @@ export interface TickerState {
 }
 
 interface AppState {
-  watchlist: string[];
+  /** Subcategories, each capped at MAX_GROUP_SIZE names. */
+  watchlistGroups: WatchlistGroup[];
+  activeGroup: string;
   tickers: Record<string, TickerState>;
   selectedTicker: string;
   capexTreatment: CapexTreatment;
@@ -64,8 +74,14 @@ interface AppState {
   restoreChecklistBaseline: (t: string) => void;
   setHorizon: (t: string, h: 3 | 5) => void;
   setScenarioTab: (t: string, tab: 'bear' | 'base' | 'bull') => void;
-  addToWatchlist: (t: string) => void;
+  /** Returns an error message when the group is full, else null. */
+  addToWatchlist: (t: string, group?: string) => string | null;
   removeFromWatchlist: (t: string) => void;
+  moveToGroup: (t: string, group: string) => string | null;
+  setActiveGroup: (name: string) => void;
+  /** Returns an error message on duplicate/invalid name, else null. */
+  addGroup: (name: string) => string | null;
+  removeGroup: (name: string) => void;
   setCapexTreatment: (c: CapexTreatment) => void;
   setDevMode: (v: boolean) => void;
 }
@@ -94,7 +110,8 @@ export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       // First-run experience: META pre-loaded from the bundled snapshot.
-      watchlist: ['META'],
+      watchlistGroups: [{ name: 'Main', tickers: ['META'] }],
+      activeGroup: 'Main',
       tickers: { META: { ...emptyTicker(), snapshots: [BUNDLED_META] } },
       selectedTicker: 'META',
       capexTreatment: 'sheet',
@@ -176,21 +193,81 @@ export const useAppStore = create<AppState>()(
         set((s) => ({
           tickers: { ...s.tickers, [t]: { ...(s.tickers[t] ?? emptyTicker()), scenarioTab } },
         })),
-      addToWatchlist: (t) =>
-        set((s) => ({
-          watchlist: s.watchlist.includes(t) ? s.watchlist : [...s.watchlist, t],
+      addToWatchlist: (t, group) => {
+        const s = get();
+        const name = group ?? s.activeGroup;
+        const g = s.watchlistGroups.find((x) => x.name === name);
+        if (!g) return `no group "${name}"`;
+        if (g.tickers.includes(t)) return null;
+        if (s.watchlistGroups.some((x) => x.tickers.includes(t))) {
+          return `${t} is already in another group — long-press it to move it`;
+        }
+        if (g.tickers.length >= MAX_GROUP_SIZE) {
+          return `"${name}" is full (${MAX_GROUP_SIZE} max) — create a new group`;
+        }
+        set({
+          watchlistGroups: s.watchlistGroups.map((x) =>
+            x.name === name ? { ...x, tickers: [...x.tickers, t] } : x,
+          ),
           tickers: s.tickers[t] ? s.tickers : { ...s.tickers, [t]: emptyTicker() },
-        })),
+        });
+        return null;
+      },
       removeFromWatchlist: (t) =>
-        set((s) => ({ watchlist: s.watchlist.filter((x) => x !== t) })),
+        set((s) => ({
+          watchlistGroups: s.watchlistGroups.map((g) => ({
+            ...g,
+            tickers: g.tickers.filter((x) => x !== t),
+          })),
+        })),
+      moveToGroup: (t, group) => {
+        const s = get();
+        const target = s.watchlistGroups.find((x) => x.name === group);
+        if (!target) return `no group "${group}"`;
+        if (target.tickers.length >= MAX_GROUP_SIZE && !target.tickers.includes(t)) {
+          return `"${group}" is full (${MAX_GROUP_SIZE} max)`;
+        }
+        set({
+          watchlistGroups: s.watchlistGroups.map((g) => {
+            const without = g.tickers.filter((x) => x !== t);
+            return g.name === group
+              ? { ...g, tickers: without.includes(t) ? without : [...without, t] }
+              : { ...g, tickers: without };
+          }),
+        });
+        return null;
+      },
+      setActiveGroup: (name) => set({ activeGroup: name }),
+      addGroup: (name) => {
+        const trimmed = name.trim().slice(0, 24);
+        if (!trimmed) return 'group name is empty';
+        const s = get();
+        if (s.watchlistGroups.some((g) => g.name.toLowerCase() === trimmed.toLowerCase())) {
+          return `"${trimmed}" already exists`;
+        }
+        set({
+          watchlistGroups: [...s.watchlistGroups, { name: trimmed, tickers: [] }],
+          activeGroup: trimmed,
+        });
+        return null;
+      },
+      removeGroup: (name) =>
+        set((s) => {
+          if (s.watchlistGroups.length <= 1) return {};
+          const groups = s.watchlistGroups.filter((g) => g.name !== name);
+          return {
+            watchlistGroups: groups,
+            activeGroup: s.activeGroup === name ? groups[0]!.name : s.activeGroup,
+          };
+        }),
       setCapexTreatment: (capexTreatment) => set({ capexTreatment }),
       setDevMode: (devMode) => set({ devMode }),
     }),
     {
       name: 'dvh-state-v1',
-      version: 2,
+      version: 3,
       migrate: (persisted, version) => {
-        const state = persisted as AppState;
+        const state = persisted as AppState & { watchlist?: string[] };
         if (version < 2) {
           // v1 stored checklist as boolean[14]; convert to editable items.
           for (const t of Object.values(state.tickers ?? {})) {
@@ -202,6 +279,19 @@ export const useAppStore = create<AppState>()(
               }));
             }
           }
+        }
+        if (version < 3 && Array.isArray(state.watchlist)) {
+          // v2 stored a flat watchlist; split into 50-name groups.
+          const groups: WatchlistGroup[] = [];
+          for (let i = 0; i < state.watchlist.length; i += MAX_GROUP_SIZE) {
+            groups.push({
+              name: groups.length === 0 ? 'Main' : `Main ${groups.length + 1}`,
+              tickers: state.watchlist.slice(i, i + MAX_GROUP_SIZE),
+            });
+          }
+          state.watchlistGroups = groups.length ? groups : [{ name: 'Main', tickers: [] }];
+          state.activeGroup = state.watchlistGroups[0]!.name;
+          delete state.watchlist;
         }
         return state;
       },

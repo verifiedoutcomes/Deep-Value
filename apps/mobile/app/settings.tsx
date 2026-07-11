@@ -17,6 +17,7 @@ export default function SettingsScreen() {
   const setProxyBaseUrl = useAppStore((s) => s.setProxyBaseUrl);
   const setDevFmpApiKey = useAppStore((s) => s.setDevFmpApiKey);
   const [proxyError, setProxyError] = React.useState<string | null>(null);
+  const [showDisclaimer, setShowDisclaimer] = React.useState(false);
   const ticker = useAppStore((s) => s.selectedTicker);
   const tickerState = useAppStore((s) => s.tickers[ticker]);
   const pinSnapshot = useAppStore((s) => s.pinSnapshot);
@@ -149,9 +150,47 @@ export default function SettingsScreen() {
         investment advice or a recommendation to buy or sell any security. Data may be delayed or
         inaccurate; verify before acting. Investing involves risk, including loss of principal.
       </Banner>
+
+      <Card>
+        <Pressable
+          onPress={() => setShowDisclaimer((v) => !v)}
+          accessibilityRole="button"
+          style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+        >
+          <SectionTitle>Legal · full investment disclaimer</SectionTitle>
+          <Mono size="sm" color={colors.textFaint}>{showDisclaimer ? '▾' : '▸'}</Mono>
+        </Pressable>
+        {showDisclaimer && (
+          <Mono size="xs" color={colors.textDim}>
+            {FULL_DISCLAIMER}
+          </Mono>
+        )}
+      </Card>
     </ScrollView>
   );
 }
+
+const FULL_DISCLAIMER = `1. NO INVESTMENT ADVICE. Deep Value Hunter ("the App") is an educational and analytical tool. All content, calculations, valuations, fair-value estimates, IRRs, target buy prices, verdicts, checklists and any other output are provided for informational purposes only and do not constitute investment advice, a research report, a recommendation, or an offer or solicitation to buy or sell any security or other financial instrument.
+
+2. NO ADVISORY RELATIONSHIP. Use of the App does not create a fiduciary, advisory, brokerage or other professional relationship. The App's operators are not registered investment advisers, broker-dealers or financial planners. Consult a qualified, licensed professional before making any investment decision.
+
+3. MODEL OUTPUTS ARE HYPOTHETICAL. Fair values, IRRs and forecasts are the mechanical output of a model driven by assumptions you control (growth rates, margins, exit multiples, discount rates). They are forward-looking, hypothetical and highly sensitive to those assumptions. They are not predictions and there is no assurance any security will trade at any modelled value. Note that the App's default "Adjusted FCF" convention ADDS BACK capital expenditure (replicating the source spreadsheet); this materially increases computed cash flow versus conventional free-cash-flow definitions.
+
+4. DATA ACCURACY. Market and fundamental data come from third-party providers and public filings. Data may be delayed, incomplete, misstated, restated or wrong, and snapshots you pin become stale by design. Nothing in the App should be relied on without independent verification from primary sources.
+
+5. RISK OF LOSS. Investing in securities involves substantial risk, including possible loss of the entire principal. Past performance, historical growth rates and historical margins do not guarantee future results. Concentrated positions, small-capitalisation stocks and companies with negative earnings carry elevated risk.
+
+6. NO GUARANTEE OF PERFORMANCE OR AVAILABILITY. The App and its data feeds are provided "as is" and "as available", without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose and non-infringement. Calculations may contain errors despite validation against the source model.
+
+7. LIMITATION OF LIABILITY. To the maximum extent permitted by law, the App's creators, operators and data providers shall not be liable for any direct, indirect, incidental, consequential, special or exemplary damages — including trading losses and lost profits — arising from use of, or reliance on, the App or its output, even if advised of the possibility of such damages.
+
+8. YOUR RESPONSIBILITY. You are solely responsible for your investment decisions, for evaluating the merits and risks of any security, and for compliance with the laws, regulations and tax rules of your jurisdiction. The App is not directed at any jurisdiction where its use would be contrary to law.
+
+9. NO TAX, LEGAL OR ACCOUNTING ADVICE. Nothing in the App constitutes tax, legal or accounting advice.
+
+10. THIRD-PARTY CONTENT. References to data providers, exchanges or companies are for identification only and do not imply endorsement, affiliation or sponsorship.
+
+By using the App you acknowledge that you have read, understood and agreed to this disclaimer in full.`;
 
 function maskKey(key: string): string {
   return key.length <= 5 ? '•••••' : `${'•'.repeat(8)}${key.slice(-5)} (saved)`;
