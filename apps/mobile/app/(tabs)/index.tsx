@@ -5,9 +5,9 @@
  * exists. Long-press a row to move or remove it; long-press a group
  * chip to delete the group.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { Link, useRouter } from 'expo-router';
+import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import { analyzeCompany } from '@dvh/engine';
 import { activeSnapshot, MAX_GROUP_SIZE, useAppStore } from '../../src/store';
 import { useTickerSearch } from '../../src/data';
@@ -111,6 +111,17 @@ function WatchRow({ ticker }: { ticker: string }) {
 export default function WatchlistScreen() {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<'added' | 'az'>('added');
+  const searchRef = useRef<TextInput>(null);
+  const savedCount = useAppStore((s) => s.savedAnalyses.length);
+  // "Research next ticker" hand-off: /?focus=1 lands here with the
+  // search box focused and the keyboard up, ready for the next name.
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
+  useEffect(() => {
+    if (focus === '1') {
+      const t = setTimeout(() => searchRef.current?.focus(), 350);
+      return () => clearTimeout(t);
+    }
+  }, [focus]);
   const [addingGroup, setAddingGroup] = useState(false);
   const [groupDraft, setGroupDraft] = useState('');
   const groups = useAppStore((s) => s.watchlistGroups);
@@ -165,6 +176,7 @@ export default function WatchlistScreen() {
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={styles.searchWrap}>
         <TextInput
+          ref={searchRef}
           style={styles.search}
           placeholder="search or filter tickers…"
           placeholderTextColor={colors.textFaint}
@@ -185,6 +197,11 @@ export default function WatchlistScreen() {
         >
           <Mono size="sm" color={sort === 'az' ? colors.accent : colors.textDim}>A–Z</Mono>
         </Pressable>
+        <Link href="/saved" asChild>
+          <Pressable style={styles.gear} accessibilityLabel={`saved analyses (${savedCount})`}>
+            <Mono size="lg" color={savedCount > 0 ? colors.accent : colors.textDim}>⌸</Mono>
+          </Pressable>
+        </Link>
         <Link href="/settings" asChild>
           <Pressable style={styles.gear}>
             <Mono size="lg" color={colors.textDim}>⚙</Mono>

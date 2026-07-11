@@ -27,6 +27,10 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ presentation: 'modal', title: 'Settings' }} />
         <Stack.Screen
+          name="saved"
+          options={{ presentation: 'modal', title: 'Saved Analyses' }}
+        />
+        <Stack.Screen
           name="dev-parity"
           options={{ presentation: 'modal', title: 'Data Parity (dev)' }}
         />

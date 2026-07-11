@@ -21,6 +21,7 @@ import { useAppStore, BUNDLED_META } from '../../src/store';
 import { colors, deltaColor, space, type } from '../../src/theme';
 import { tapHaptic } from '../../src/haptics';
 import { Banner, Card, Chip, KV, Mono, SectionTitle } from '../../src/components/ui';
+import { AnalysisBar } from '../../src/components/AnalysisBar';
 import { PriceChart } from '../../src/components/PriceChart';
 import { Sparkline } from '../../src/components/Sparkline';
 import { money, num, pct, pctSigned, price, ratio, shares } from '../../src/format';
@@ -79,9 +80,8 @@ const HEAD_H = 44;
 
 export default function CompanyScreen() {
   const { width } = useWindowDimensions();
-  const { ticker, snapshot, analysis } = useTickerAnalysis();
+  const { ticker, snapshot, analysis, capexTreatment, reviewing } = useTickerAnalysis();
   const refresh = useRefreshSnapshot(ticker);
-  const capexTreatment = useAppStore((s) => s.capexTreatment);
 
   if (!snapshot || !analysis) {
     return (
@@ -115,15 +115,21 @@ export default function CompanyScreen() {
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bg }}
       refreshControl={
-        <RefreshControl
-          refreshing={refresh.isPending}
-          onRefresh={() => refresh.mutate()}
-          tintColor={colors.accent}
-        />
+        // no live refresh while reviewing a frozen analysis
+        reviewing ? undefined : (
+          <RefreshControl
+            refreshing={refresh.isPending}
+            onRefresh={() => refresh.mutate()}
+            tintColor={colors.accent}
+          />
+        )
       }
       contentContainerStyle={{ paddingBottom: space.xl }}
     >
-      <Banner tone={isBundled || stale || refresh.isError ? 'warn' : 'info'}>{bannerText}</Banner>
+      <AnalysisBar reviewing={reviewing} />
+      {!reviewing && (
+        <Banner tone={isBundled || stale || refresh.isError ? 'warn' : 'info'}>{bannerText}</Banner>
+      )}
 
       <Card>
         <View style={styles.headRow}>

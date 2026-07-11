@@ -14,8 +14,8 @@ import type {
   CompanySnapshot,
   ScenarioOverrides,
 } from '@dvh/engine';
-import type { CapexTreatment } from '@dvh/engine';
-import { CHECKLIST_QUESTIONS } from '@dvh/engine';
+import type { CapexTreatment, HorizonYears, ScenarioKind } from '@dvh/engine';
+import { CHECKLIST_QUESTIONS, analyzeCompany } from '@dvh/engine';
 import metaFixture from '@dvh/engine/fixtures/meta-2026-07-10.json';
 
 export const BUNDLED_META = metaFixture as unknown as CompanySnapshot;
@@ -32,6 +32,36 @@ export interface WatchlistGroup {
 }
 
 export const MAX_GROUP_SIZE = 50;
+
+/**
+ * A saved analysis: the complete, frozen state behind the Company AND
+ * Valuation tabs at one moment. The engine is pure, so persisting
+ * {data snapshot, scenario overrides, capex treatment} reproduces every
+ * derived number exactly when revisited later — plus a digest of the
+ * headline results captured at save time for the list view.
+ */
+export interface SavedAnalysis {
+  id: string;
+  ticker: string;
+  name: string;
+  savedAt: string; // ISO datetime
+  snapshot: CompanySnapshot;
+  overrides: ScenarioOverrides;
+  capexTreatment: CapexTreatment;
+  horizon: HorizonYears;
+  scenarioTab: ScenarioKind;
+  digest: {
+    price: number;
+    peLive: number | null;
+    evEbit: number | null;
+    fcfYield: number | null;
+    fairValue5: number | null;
+    irr5: number | null;
+    priceDelta5: number | null;
+  };
+}
+
+export const MAX_SAVED_ANALYSES = 200;
 
 export interface TickerState {
   /** newest first; index 0 is the live view unless a pin is set */
@@ -61,8 +91,17 @@ interface AppState {
    */
   devFmpApiKey: string;
   devMode: boolean;
+  /** Frozen analyses (Company + Valuation state), newest first. */
+  savedAnalyses: SavedAnalysis[];
+  /** When set, Company/Valuation render this frozen state read-only. */
+  reviewingId: string | null;
   setProxyBaseUrl: (url: string) => string | null;
   setDevFmpApiKey: (key: string) => Promise<void>;
+  /** Freeze the current ticker's full analysis. Returns the new id, or an error string. */
+  saveAnalysis: () => { id: string } | { error: string };
+  deleteAnalysis: (id: string) => void;
+  startReview: (id: string) => void;
+  exitReview: () => void;
   // actions
   selectTicker: (t: string) => void;
   addSnapshot: (t: string, snap: CompanySnapshot) => void;
@@ -118,6 +157,48 @@ export const useAppStore = create<AppState>()(
       proxyBaseUrl: '',
       devFmpApiKey: '',
       devMode: false,
+      savedAnalyses: [],
+      reviewingId: null,
+
+      saveAnalysis: () => {
+        const s = get();
+        const ticker = s.selectedTicker;
+        const state = s.tickers[ticker];
+        const snapshot = activeSnapshot(state);
+        if (!state || !snapshot) return { error: `no data loaded for ${ticker}` };
+        const analysis = analyzeCompany(snapshot, state.overrides, s.capexTreatment);
+        const base5 = analysis.scenarios.base[5];
+        const savedAt = new Date().toISOString();
+        const entry: SavedAnalysis = {
+          id: `${ticker}-${Date.now()}`,
+          ticker,
+          name: snapshot.name,
+          savedAt,
+          snapshot,
+          overrides: JSON.parse(JSON.stringify(state.overrides)),
+          capexTreatment: s.capexTreatment,
+          horizon: state.horizon,
+          scenarioTab: state.scenarioTab,
+          digest: {
+            price: snapshot.quote.price,
+            peLive: analysis.header.peLiveCap,
+            evEbit: analysis.header.evOverOperatingIncome,
+            fcfYield: analysis.header.adjFcfYield,
+            fairValue5: base5.status === 'ok' ? base5.fairValuePerShare : null,
+            irr5: base5.status === 'ok' ? base5.irr : null,
+            priceDelta5: base5.status === 'ok' ? base5.priceDelta : null,
+          },
+        };
+        set({ savedAnalyses: [entry, ...s.savedAnalyses].slice(0, MAX_SAVED_ANALYSES) });
+        return { id: entry.id };
+      },
+      deleteAnalysis: (id) =>
+        set((s) => ({
+          savedAnalyses: s.savedAnalyses.filter((a) => a.id !== id),
+          reviewingId: s.reviewingId === id ? null : s.reviewingId,
+        })),
+      startReview: (id) => set({ reviewingId: id }),
+      exitReview: () => set({ reviewingId: null }),
 
       setProxyBaseUrl: (url) => {
         const trimmed = url.trim();
@@ -146,6 +227,7 @@ export const useAppStore = create<AppState>()(
       selectTicker: (t) =>
         set((s) => ({
           selectedTicker: t,
+          reviewingId: null, // switching tickers always leaves review mode
           tickers: s.tickers[t] ? s.tickers : { ...s.tickers, [t]: emptyTicker() },
         })),
       addSnapshot: (t, snap) =>
@@ -298,9 +380,10 @@ export const useAppStore = create<AppState>()(
       storage: createJSONStorage(() => Storage),
       // The API key must never touch the SQLite-persisted JSON: it lives
       // in the Keychain and is re-hydrated by hydrateSecureState().
+      // reviewingId is transient UI state.
       partialize: (s) =>
         Object.fromEntries(
-          Object.entries(s).filter(([k]) => k !== 'devFmpApiKey'),
+          Object.entries(s).filter(([k]) => k !== 'devFmpApiKey' && k !== 'reviewingId'),
         ) as AppState,
     },
   ),

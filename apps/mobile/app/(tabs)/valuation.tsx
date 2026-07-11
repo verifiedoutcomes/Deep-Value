@@ -43,6 +43,7 @@ import { useAppStore } from '../../src/store';
 import { tapHaptic, toggleHaptic } from '../../src/haptics';
 import { colors, deltaColor, space, type } from '../../src/theme';
 import { Banner, Card, Chip, Mono, SectionTitle } from '../../src/components/ui';
+import { AnalysisBar } from '../../src/components/AnalysisBar';
 import { FormulaProvider, InfoTag } from '../../src/components/FormulaInfo';
 import {
   adjFcfMarginFormula,
@@ -57,13 +58,22 @@ import {
 import { money, pct, pctSigned, price } from '../../src/format';
 
 export default function ValuationScreen() {
-  const { ticker, state, snapshot, analysis } = useTickerAnalysis();
+  const {
+    ticker,
+    snapshot,
+    analysis,
+    overrides,
+    capexTreatment,
+    horizon,
+    scenarioTab: kind,
+    reviewing,
+  } = useTickerAnalysis();
   const setOverrides = useAppStore((s) => s.setOverrides);
   const setHorizon = useAppStore((s) => s.setHorizon);
   const setScenarioTab = useAppStore((s) => s.setScenarioTab);
-  const capexTreatment = useAppStore((s) => s.capexTreatment);
+  const readOnly = reviewing != null;
 
-  if (!snapshot || !analysis || !state) {
+  if (!snapshot || !analysis) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, padding: space.lg }}>
         <Banner>No snapshot for {ticker} yet — load one from the Company tab.</Banner>
@@ -71,9 +81,6 @@ export default function ValuationScreen() {
     );
   }
 
-  const horizon = state.horizon;
-  const kind = state.scenarioTab;
-  const overrides = state.overrides;
   const valuation = analysis.scenarios[kind][horizon];
   const anchors = analysis.anchors;
   const seededExit5 = analysis.derived[analysis.derived.length - 1]?.evToEbit ?? 0;
@@ -82,13 +89,18 @@ export default function ValuationScreen() {
     overrides.years?.[kind]?.[horizon] ??
     (kind === 'base' ? seedBaseScenario(analysis.derived, horizon) : seedEmptyScenario(horizon));
 
-  const patch = (p: Partial<ScenarioOverrides>) => setOverrides(ticker, { ...overrides, ...p });
+  // In review mode the frozen analysis is read-only: edits are ignored.
+  const patch = (p: Partial<ScenarioOverrides>) => {
+    if (readOnly) return;
+    setOverrides(ticker, { ...overrides, ...p });
+  };
 
   const setYear = (
     idx: number,
     field: 'revenueYoY' | 'operatingMargin' | 'adjFcfMargin',
     v: number,
   ) => {
+    if (readOnly) return;
     const next = years.map((y, i) => (i === idx ? { ...y, [field]: v } : y));
     patch({
       years: {
@@ -111,6 +123,7 @@ export default function ValuationScreen() {
     overrides.adjustmentMillions?.[kind]?.[horizon] != null;
 
   const resetToSeeded = () => {
+    if (readOnly) return;
     toggleHaptic();
     const yearsCopy = { ...overrides.years?.[kind] };
     delete yearsCopy[horizon];
@@ -147,7 +160,8 @@ export default function ValuationScreen() {
       contentContainerStyle={{ paddingBottom: space.xl }}
       keyboardShouldPersistTaps="handled"
     >
-      <View style={styles.toggles}>
+      <AnalysisBar reviewing={reviewing} />
+      <View style={[styles.toggles, readOnly && { opacity: 0.55 }]}>
         <View style={{ flexDirection: 'row' }}>
           {(['bear', 'base', 'bull'] as ScenarioKind[]).map((k) => (
             <Chip
@@ -156,6 +170,7 @@ export default function ValuationScreen() {
               active={kind === k}
               tone={k === 'bear' ? 'bad' : k === 'bull' ? 'good' : 'neutral'}
               onPress={() => {
+                if (readOnly) return;
                 tapHaptic();
                 setScenarioTab(ticker, k);
               }}
@@ -169,6 +184,7 @@ export default function ValuationScreen() {
               label={`${hz}yr`}
               active={horizon === hz}
               onPress={() => {
+                if (readOnly) return;
                 tapHaptic();
                 setHorizon(ticker, hz);
               }}
@@ -190,7 +206,7 @@ export default function ValuationScreen() {
           <SectionTitle>
             {horizon}-year {finalYear} forecast · {kind}
           </SectionTitle>
-          {hasEdits && (
+          {hasEdits && !readOnly && (
             <Pressable onPress={resetToSeeded} hitSlop={8}>
               <Mono size="xs" color={colors.blue}>↺ reset to seeded</Mono>
             </Pressable>
