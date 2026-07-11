@@ -29,6 +29,11 @@ export interface QuoteData {
 /** Raw annual fundamentals for one fiscal year, in REPORTING currency. */
 export interface AnnualFundamentals {
   fiscalYear: number;
+  /**
+   * Period-end date (ISO), when the provider reports it. Non-December
+   * fiscal years (MSFT: June) need this for price-based enrichment.
+   */
+  fiscalYearEnd?: string;
   revenue: Maybe;
   operatingIncome: Maybe;
   operatingCashFlow: Maybe;

@@ -24,12 +24,25 @@
  *   /fmp/stable/<endpoint>?...       -> financialmodelingprep.com (allowlisted)
  *   /edgar/companyfacts/<TICKER>     -> SEC EDGAR XBRL company facts (free fallback)
  */
-import { FmpProvider, UsdOnlyFxTable, loadCompanySnapshot } from '@dvh/data';
+import {
+  EdgarFirstProvider,
+  FmpProvider,
+  SecEdgarProvider,
+  UsdOnlyFxTable,
+  loadCompanySnapshot,
+  type DataProvider,
+} from '@dvh/data';
 export interface Env {
   FMP_API_KEY: string;
   CACHE: KVNamespace;
   /** Optional override, requests/min/IP. Default 60. */
   RATE_LIMIT_PER_MIN?: string;
+  /**
+   * Data backbone for /bundle: 'fmp' (default) or 'edgar-first'
+   * (statements from public-domain SEC XBRL; only prices/quotes from
+   * FMP). Flipping this needs NO app update.
+   */
+  DATA_SOURCE?: string;
 }
 
 const FMP_ORIGIN = 'https://financialmodelingprep.com';
@@ -177,12 +190,24 @@ function handleFmp(env: Env, url: URL): Promise<Response> | Response {
  */
 const BUNDLE_TTL = 15 * 60; // quote freshness bound; fundamentals barely move
 
+/** Build the /bundle data backbone per DATA_SOURCE. */
+function bundleProvider(env: Env): DataProvider {
+  const fmp = new FmpProvider({ baseUrl: FMP_ORIGIN, apiKey: env.FMP_API_KEY });
+  if ((env.DATA_SOURCE ?? 'fmp') !== 'edgar-first') return fmp;
+  // In-process shim: SecEdgarProvider's fetch goes straight to this
+  // worker's own EDGAR handler (with its KV caching + ticker->CIK map).
+  const edgar = new SecEdgarProvider('internal://edgar', async (input) => {
+    const m = String(input).match(/companyfacts\/([A-Za-z.\-]{1,10})$/);
+    if (!m) return new Response('bad edgar shim path', { status: 400 });
+    return handleEdgar(env, m[1]!.toUpperCase());
+  });
+  return new EdgarFirstProvider(edgar, fmp);
+}
+
 async function handleBundle(env: Env, ticker: string): Promise<Response> {
-  return cachedFetch(env, `bundle:${ticker}`, BUNDLE_TTL, async () => {
-    const provider = new FmpProvider({
-      baseUrl: FMP_ORIGIN,
-      apiKey: env.FMP_API_KEY,
-    });
+  const source = (env.DATA_SOURCE ?? 'fmp') === 'edgar-first' ? 'edgar' : 'fmp';
+  return cachedFetch(env, `bundle:${source}:${ticker}`, BUNDLE_TTL, async () => {
+    const provider = bundleProvider(env);
     try {
       const snapshot = await loadCompanySnapshot(
         provider,

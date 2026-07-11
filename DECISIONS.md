@@ -297,7 +297,32 @@ disagreed, **the file won**; those cases are called out explicitly.
     one-tap "Research next ticker →" that lands on the Watchlist with
     the search box focused. Capped at 200 entries, newest first.
 
-41. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+41. **Golden-company robustness suite (2026-07-11).** Beyond the META
+    exactness gate, `golden-companies.test.ts` runs seven synthetic sector
+    archetypes (bank with null capex/gross profit, leveraged REIT, 3-year
+    IPO, money-losing biotech, negative-tangible-book staple, pre-revenue
+    shell, null-riddled provider data) through the full engine with three
+    invariants: never throw; never emit NaN/Infinity anywhere in the
+    output tree; degrade only to the sheet's honest states ('No
+    Forecast', '#NUM!', 'Neg Book', dashes). Two findings encoded as
+    expectations, both correct sheet behaviour: a bank's IRR computes
+    from the terminal value alone (op margin non-zero keeps the countif
+    gate open over zero FCF years), and a net-cash shell's 3-year block
+    finds a real deeply-negative IRR instead of #NUM!.
+
+42. **EDGAR-first path completed (2026-07-11).** `EdgarFirstProvider`
+    composes public-domain SEC XBRL statements with a market feed used
+    ONLY for prices/quotes: per-year market cap = shares × close nearest
+    the fiscal-year-END date (new `fiscalYearEnd` field; MSFT's June FYE
+    verified live), EV = market cap + net debt (the model's own P+M
+    definition), ROIC left null rather than inventing a definition (Adj
+    ROIC Q124 covers it). The worker's /bundle flips backbones with a
+    single `DATA_SOURCE=edgar-first` env var — no app update. Live MSFT
+    result: 19 fiscal years of statements (2007–2025) vs 6 under the FMP
+    free tier, engine clean end-to-end. This is both the licensing
+    escape hatch and negotiating leverage on any display-license quote.
+
+43. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.

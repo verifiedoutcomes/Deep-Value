@@ -60,6 +60,12 @@ the Starter tier suffices. Free fallback: SEC EDGAR XBRL company facts.
 **Nothing here signs you up or spends money; keys and accounts are yours
 to create.**
 
+**EDGAR-first mode** (license-clean backbone): set `DATA_SOURCE=edgar-first`
+on the Worker and /bundle assembles statements from public-domain SEC XBRL
+(19+ years for US filers), using FMP only for prices/quotes; per-year market
+cap = shares × close at the fiscal year end, EV = cap + net debt. No app
+update needed to switch.
+
 Deploy the proxy so the key never ships in the app:
 
 ```bash

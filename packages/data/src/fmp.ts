@@ -130,6 +130,7 @@ export class FmpProvider implements DataProvider {
       operatingIncome: num(r.operatingIncome),
       grossProfit: num(r.grossProfit),
       netIncome: num(r.netIncome),
+      fiscalYearEnd: typeof r.date === 'string' ? r.date : undefined,
     }));
     merge(cashflow, (r) => ({
       operatingCashFlow: num(r.operatingCashFlow ?? r.netCashProvidedByOperatingActivities),
@@ -163,6 +164,7 @@ export class FmpProvider implements DataProvider {
       .sort(([a], [b]) => a - b)
       .map(([fiscalYear, f]) => ({
         fiscalYear,
+        fiscalYearEnd: f.fiscalYearEnd,
         revenue: f.revenue ?? null,
         operatingIncome: f.operatingIncome ?? null,
         operatingCashFlow: f.operatingCashFlow ?? null,

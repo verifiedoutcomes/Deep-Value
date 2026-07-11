@@ -70,12 +70,12 @@ export class SecEdgarProvider implements DataProvider {
     return (await res.json()) as CompanyFacts;
   }
 
-  private static annualValue(
+  private static annualFact(
     facts: CompanyFacts,
     tags: string[],
     fiscalYear: number,
     flow: boolean,
-  ): Maybe {
+  ): { val: number; end: string } | null {
     const gaap = facts.facts['us-gaap'];
     if (!gaap) return null;
     for (const tag of tags) {
@@ -87,11 +87,11 @@ export class SecEdgarProvider implements DataProvider {
         (u) =>
           u.form === '10-K' &&
           u.fp === 'FY' &&
-          new Date(u.end).getFullYear() === fiscalYear + (flow ? 0 : 0) &&
+          new Date(u.end).getFullYear() === fiscalYear &&
           (!flow || (u.start != null && monthsBetween(u.start, u.end) > 9)),
       );
       const hit = candidates[candidates.length - 1];
-      if (hit) return hit.val;
+      if (hit) return { val: hit.val, end: hit.end };
     }
     return null;
   }
@@ -101,10 +101,13 @@ export class SecEdgarProvider implements DataProvider {
     const out: AnnualFundamentals[] = [];
     const thisYear = new Date().getFullYear();
     for (let y = sinceYear; y < thisYear; y++) {
-      const v = (key: string, flow = true) =>
-        SecEdgarProvider.annualValue(facts, TAGS[key] ?? [], y, flow);
-      const revenue = v('revenue');
-      const netIncome = v('netIncome');
+      const fact = (key: string, flow = true) =>
+        SecEdgarProvider.annualFact(facts, TAGS[key] ?? [], y, flow);
+      const v = (key: string, flow = true): Maybe => fact(key, flow)?.val ?? null;
+      const revenueFact = fact('revenue');
+      const revenue = revenueFact?.val ?? null;
+      const netIncomeFact = fact('netIncome');
+      const netIncome = netIncomeFact?.val ?? null;
       if (revenue == null && netIncome == null) continue;
       const capexOutflow = v('capex');
       const ltd = v('longTermDebt', false);
@@ -112,6 +115,7 @@ export class SecEdgarProvider implements DataProvider {
       const equity = v('equity', false);
       out.push({
         fiscalYear: y,
+        fiscalYearEnd: revenueFact?.end ?? netIncomeFact?.end,
         revenue,
         operatingIncome: v('operatingIncome'),
         operatingCashFlow: v('operatingCashFlow'),
