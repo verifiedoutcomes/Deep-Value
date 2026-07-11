@@ -9,6 +9,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import Storage from 'expo-sqlite/kv-store';
+import * as SecureStore from 'expo-secure-store';
 import type {
   CompanySnapshot,
   ScenarioOverrides,
@@ -34,10 +35,17 @@ interface AppState {
   selectedTicker: string;
   capexTreatment: CapexTreatment;
   proxyBaseUrl: string;
-  /** Dev convenience only: talks to FMP directly when no proxy is set.
-   *  Production builds should always use the proxy (key server-side). */
+  /**
+   * Dev convenience only: talks to FMP directly when no proxy is set.
+   * SECURITY: held in memory here but persisted ONLY to the iOS
+   * Keychain / Android Keystore via expo-secure-store -- `partialize`
+   * below excludes it from the SQLite-persisted JSON. Production builds
+   * should always use the proxy (key server-side).
+   */
   devFmpApiKey: string;
   devMode: boolean;
+  setProxyBaseUrl: (url: string) => string | null;
+  setDevFmpApiKey: (key: string) => Promise<void>;
   // actions
   selectTicker: (t: string) => void;
   addSnapshot: (t: string, snap: CompanySnapshot) => void;
@@ -71,6 +79,30 @@ export const useAppStore = create<AppState>()(
       proxyBaseUrl: '',
       devFmpApiKey: '',
       devMode: false,
+
+      setProxyBaseUrl: (url) => {
+        const trimmed = url.trim();
+        if (trimmed && !/^https:\/\/[a-z0-9.\-]+/i.test(trimmed)) {
+          return 'Proxy URL must be https://';
+        }
+        set({ proxyBaseUrl: trimmed });
+        return null;
+      },
+      setDevFmpApiKey: async (key) => {
+        const trimmed = key.trim();
+        set({ devFmpApiKey: trimmed });
+        try {
+          if (trimmed) {
+            await SecureStore.setItemAsync(SECURE_KEY_NAME, trimmed, {
+              keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+            });
+          } else {
+            await SecureStore.deleteItemAsync(SECURE_KEY_NAME);
+          }
+        } catch {
+          // SecureStore unavailable (e.g. web preview): key stays in memory only
+        }
+      },
 
       selectTicker: (t) =>
         set((s) => ({
@@ -126,9 +158,27 @@ export const useAppStore = create<AppState>()(
     {
       name: 'dvh-state-v1',
       storage: createJSONStorage(() => Storage),
+      // The API key must never touch the SQLite-persisted JSON: it lives
+      // in the Keychain and is re-hydrated by hydrateSecureState().
+      partialize: (s) =>
+        Object.fromEntries(
+          Object.entries(s).filter(([k]) => k !== 'devFmpApiKey'),
+        ) as AppState,
     },
   ),
 );
+
+const SECURE_KEY_NAME = 'dvh.fmp.apikey';
+
+/** Load Keychain-held secrets into the in-memory store at app start. */
+export async function hydrateSecureState(): Promise<void> {
+  try {
+    const key = await SecureStore.getItemAsync(SECURE_KEY_NAME);
+    if (key) useAppStore.setState({ devFmpApiKey: key });
+  } catch {
+    // SecureStore unavailable: dev key simply stays unset
+  }
+}
 
 /** The snapshot the UI should render for a ticker (pinned or newest). */
 export function activeSnapshot(state: TickerState | undefined): CompanySnapshot | null {

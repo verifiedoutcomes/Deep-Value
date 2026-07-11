@@ -3,7 +3,7 @@
  * and a verdict chip where a base forecast exists.
  */
 import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { analyzeCompany } from '@dvh/engine';
 import { activeSnapshot, useAppStore } from '../../src/store';
@@ -11,12 +11,14 @@ import { useTickerSearch } from '../../src/data';
 import { colors, space, type } from '../../src/theme';
 import { Chip, Mono } from '../../src/components/ui';
 import { pct, price, ratio } from '../../src/format';
+import { tapHaptic, warningHaptic } from '../../src/haptics';
 
 function WatchRow({ ticker }: { ticker: string }) {
   const router = useRouter();
   const state = useAppStore((s) => s.tickers[ticker]);
   const capexTreatment = useAppStore((s) => s.capexTreatment);
   const selectTicker = useAppStore((s) => s.selectTicker);
+  const removeFromWatchlist = useAppStore((s) => s.removeFromWatchlist);
   const snapshot = activeSnapshot(state);
   const analysis = useMemo(
     () => (snapshot ? analyzeCompany(snapshot, state?.overrides ?? {}, capexTreatment) : null),
@@ -32,9 +34,18 @@ function WatchRow({ ticker }: { ticker: string }) {
     <Pressable
       style={styles.row}
       onPress={() => {
+        tapHaptic();
         selectTicker(ticker);
         router.navigate('/company');
       }}
+      onLongPress={() => {
+        warningHaptic();
+        Alert.alert(`Remove ${ticker}?`, 'Snapshots and scenario edits are kept.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Remove', style: 'destructive', onPress: () => removeFromWatchlist(ticker) },
+        ]);
+      }}
+      delayLongPress={400}
     >
       <View style={{ flex: 1.2 }}>
         <Mono bold>{ticker}</Mono>
@@ -134,6 +145,14 @@ export default function WatchlistScreen() {
         keyExtractor={(t) => t}
         renderItem={({ item }) => <WatchRow ticker={item} />}
         contentContainerStyle={{ paddingBottom: space.xl }}
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <Mono size="sm" color={colors.textDim}>Watchlist is empty.</Mono>
+            <Mono size="xs" color={colors.textFaint}>
+              Search above, or type a ticker and hit return. Long-press a row to remove it.
+            </Mono>
+          </View>
+        }
       />
     </View>
   );
@@ -186,4 +205,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cell: { flex: 0.8, alignItems: 'flex-start' },
+  empty: {
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 64,
+    paddingHorizontal: space.xl,
+  },
 });

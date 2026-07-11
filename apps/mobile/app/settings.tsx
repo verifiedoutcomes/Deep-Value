@@ -5,6 +5,7 @@ import { Link } from 'expo-router';
 import { useAppStore, activeSnapshot } from '../src/store';
 import { colors, space, type } from '../src/theme';
 import { Banner, Card, Chip, Mono, SectionTitle } from '../src/components/ui';
+import { toggleHaptic } from '../src/haptics';
 
 export default function SettingsScreen() {
   const capexTreatment = useAppStore((s) => s.capexTreatment);
@@ -13,6 +14,9 @@ export default function SettingsScreen() {
   const setDevMode = useAppStore((s) => s.setDevMode);
   const proxyBaseUrl = useAppStore((s) => s.proxyBaseUrl);
   const devFmpApiKey = useAppStore((s) => s.devFmpApiKey);
+  const setProxyBaseUrl = useAppStore((s) => s.setProxyBaseUrl);
+  const setDevFmpApiKey = useAppStore((s) => s.setDevFmpApiKey);
+  const [proxyError, setProxyError] = React.useState<string | null>(null);
   const ticker = useAppStore((s) => s.selectedTicker);
   const tickerState = useAppStore((s) => s.tickers[ticker]);
   const pinSnapshot = useAppStore((s) => s.pinSnapshot);
@@ -26,12 +30,18 @@ export default function SettingsScreen() {
           <Chip
             label="Sheet: OCF + |capex| − SBC"
             active={capexTreatment === 'sheet'}
-            onPress={() => setCapexTreatment('sheet')}
+            onPress={() => {
+              toggleHaptic();
+              setCapexTreatment('sheet');
+            }}
           />
           <Chip
             label="OCF − |capex| − SBC"
             active={capexTreatment === 'conventional'}
-            onPress={() => setCapexTreatment('conventional')}
+            onPress={() => {
+              toggleHaptic();
+              setCapexTreatment('conventional');
+            }}
           />
         </View>
         <Mono size="xs" color={colors.textFaint}>
@@ -51,7 +61,10 @@ export default function SettingsScreen() {
             <Pressable
               key={s.snapshotDate + String(s.quote.price)}
               style={styles.snapRow}
-              onPress={() => pinSnapshot(ticker, pinned ? undefined : s.snapshotDate)}
+              onPress={() => {
+                toggleHaptic();
+                pinSnapshot(ticker, pinned ? undefined : s.snapshotDate);
+              }}
             >
               <Mono size="sm" color={isActive ? colors.accent : colors.text}>
                 {s.snapshotDate} · px {s.quote.price.toFixed(2)}
@@ -76,28 +89,44 @@ export default function SettingsScreen() {
           placeholderTextColor={colors.textFaint}
           autoCapitalize="none"
           autoCorrect={false}
+          keyboardType="url"
           defaultValue={proxyBaseUrl}
-          onEndEditing={(e) => useAppStore.setState({ proxyBaseUrl: e.nativeEvent.text.trim() })}
+          onEndEditing={(e) => setProxyError(setProxyBaseUrl(e.nativeEvent.text))}
         />
+        {proxyError && (
+          <Mono size="xs" color={colors.red}>
+            {proxyError}
+          </Mono>
+        )}
         <Mono size="xs" color={colors.textFaint}>
           All provider calls route through the serverless proxy (apps/api); no API key is stored
-          in this app.
+          in this app. https only.
         </Mono>
         <View style={{ height: space.sm }} />
         <SectionTitle>FMP API key (dev only)</SectionTitle>
         <TextInput
           style={styles.input}
-          placeholder="used directly against FMP when no proxy is set"
-          placeholderTextColor={colors.textFaint}
+          placeholder={devFmpApiKey ? maskKey(devFmpApiKey) : 'used directly against FMP when no proxy is set'}
+          placeholderTextColor={devFmpApiKey ? colors.textDim : colors.textFaint}
           autoCapitalize="none"
           autoCorrect={false}
           secureTextEntry
-          defaultValue={devFmpApiKey}
-          onEndEditing={(e) => useAppStore.setState({ devFmpApiKey: e.nativeEvent.text.trim() })}
+          onEndEditing={(e) => {
+            const text = e.nativeEvent.text;
+            if (text.trim()) void setDevFmpApiKey(text);
+          }}
         />
+        {Boolean(devFmpApiKey) && (
+          <Pressable onPress={() => void setDevFmpApiKey('')}>
+            <Mono size="xs" color={colors.red}>
+              remove key from Keychain
+            </Mono>
+          </Pressable>
+        )}
         <Mono size="xs" color={colors.textFaint}>
-          Development convenience. The free tier covers ~5 years of history; the model's 2007+
-          table needs the Starter plan. Ship production builds with the proxy instead.
+          Stored in the iOS Keychain (this device only), never in the app database. Free tier
+          covers ~5 years of history; the model's 2007+ table needs the Starter plan. Ship
+          production builds with the proxy instead.
         </Mono>
       </Card>
 
@@ -122,6 +151,10 @@ export default function SettingsScreen() {
       </Banner>
     </ScrollView>
   );
+}
+
+function maskKey(key: string): string {
+  return key.length <= 5 ? '•••••' : `${'•'.repeat(8)}${key.slice(-5)} (saved)`;
 }
 
 const styles = StyleSheet.create({

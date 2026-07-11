@@ -14,6 +14,7 @@ import {
 } from '@dvh/data';
 import type { CompanySnapshot } from '@dvh/engine';
 import { BUNDLED_META, useAppStore } from './store';
+import { successHaptic, warningHaptic } from './haptics';
 
 export function proxyBaseUrl(): string {
   const fromStore = useAppStore.getState().proxyBaseUrl;
@@ -55,7 +56,11 @@ export function useRefreshSnapshot(ticker: string) {
   const addSnapshot = useAppStore((s) => s.addSnapshot);
   return useMutation({
     mutationFn: () => pullSnapshot(ticker),
-    onSuccess: (snap) => addSnapshot(ticker, snap),
+    onSuccess: (snap) => {
+      successHaptic();
+      addSnapshot(ticker, snap);
+    },
+    onError: () => warningHaptic(),
   });
 }
 

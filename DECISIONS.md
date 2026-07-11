@@ -165,7 +165,33 @@ disagreed, **the file won**; those cases are called out explicitly.
     production builds configure the proxy so no key lives on-device. API
     keys are never committed to the repo.
 
-25. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+25. **Proxy hardening (2026-07-11).** The worker forwards ONLY an
+    allowlisted set of FMP endpoints, each with a parameter schema
+    (symbol/date/limit regexes, limit ≤ 100); anything else is 403/400, so
+    the worker cannot be used as an open proxy to burn the key's quota.
+    Client-supplied `apikey` params are dropped; the secret never appears
+    in cache keys. Per-IP fixed-window rate limit (default 60 req/min,
+    `RATE_LIMIT_PER_MIN` var), GET-only, `nosniff`/`no-referrer` headers,
+    upstream errors passed through as opaque JSON and never cached.
+
+26. **Key storage on-device (2026-07-11).** The dev-only FMP key lives in
+    the iOS Keychain / Android Keystore via expo-secure-store
+    (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`), is excluded from the
+    SQLite-persisted zustand state via `partialize`, is masked in the UI,
+    and can be removed with one tap. Proxy URLs are validated https-only.
+    Production remains proxy-only: no key on device at all.
+
+27. **Usability pass (2026-07-11).** Valuation assumptions get ± steppers
+    (0.5pp per tap) alongside keyboard entry, plus a one-tap "reset to
+    seeded" that drops the per-block overrides; KeyboardAvoidingView so
+    inputs aren't hidden by the keyboard; watchlist rows long-press to
+    remove (with confirm) and an empty state; the snapshot banner turns
+    amber and shows age when a snapshot is >7 days old, and surfaces
+    refresh errors; checklist gains a progress bar and switch semantics
+    for VoiceOver; haptic feedback (expo-haptics) on toggles, pins,
+    steppers and refresh outcomes.
+
+28. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.

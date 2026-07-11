@@ -3,12 +3,16 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { colors } from '../src/theme';
+import { hydrateSecureState } from '../src/store';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1 } },
 });
 
 export default function RootLayout() {
+  React.useEffect(() => {
+    void hydrateSecureState();
+  }, []);
   return (
     <QueryClientProvider client={queryClient}>
       <StatusBar style="light" />

@@ -5,7 +5,15 @@
  * safety targets, verdict card.
  */
 import React from 'react';
-import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import type {
   HorizonYears,
   Maybe,
@@ -22,6 +30,7 @@ import {
 } from '@dvh/engine';
 import { useTickerAnalysis } from '../../src/analysis';
 import { useAppStore } from '../../src/store';
+import { tapHaptic, toggleHaptic } from '../../src/haptics';
 import { colors, deltaColor, space, type } from '../../src/theme';
 import { Banner, Card, Chip, KV, Mono, SectionTitle } from '../../src/components/ui';
 import { money, pct, pctSigned, price } from '../../src/format';
@@ -67,8 +76,47 @@ export default function ValuationScreen() {
   const exitCurrent =
     horizon === 5 ? exit5 : overrides.exitMultiple3?.[kind] ?? derive3yExitMultiple(kind, exit5);
 
+  const hasEdits =
+    overrides.years?.[kind]?.[horizon] != null ||
+    (horizon === 5
+      ? overrides.exitMultiple5?.[kind] != null
+      : overrides.exitMultiple3?.[kind] != null) ||
+    overrides.adjustmentMillions?.[kind]?.[horizon] != null;
+
+  const resetToSeeded = () => {
+    toggleHaptic();
+    const years = { ...overrides.years?.[kind] };
+    delete years[horizon];
+    const adj = { ...overrides.adjustmentMillions?.[kind] };
+    delete adj[horizon];
+    const next = {
+      ...overrides,
+      years: { ...overrides.years, [kind]: years },
+      adjustmentMillions: { ...overrides.adjustmentMillions, [kind]: adj },
+    };
+    if (horizon === 5) {
+      const em = { ...overrides.exitMultiple5 };
+      delete em[kind];
+      next.exitMultiple5 = em;
+    } else {
+      const em = { ...overrides.exitMultiple3 };
+      delete em[kind];
+      next.exitMultiple3 = em;
+    }
+    setOverrides(ticker, next);
+  };
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: space.xl }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={96}
+    >
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={{ paddingBottom: space.xl }}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.toggles}>
         <View style={{ flexDirection: 'row' }}>
           {(['bear', 'base', 'bull'] as ScenarioKind[]).map((k) => (
@@ -77,13 +125,24 @@ export default function ValuationScreen() {
               label={k.toUpperCase()}
               active={kind === k}
               tone={k === 'bear' ? 'bad' : k === 'bull' ? 'good' : 'neutral'}
-              onPress={() => setScenarioTab(ticker, k)}
+              onPress={() => {
+                tapHaptic();
+                setScenarioTab(ticker, k);
+              }}
             />
           ))}
         </View>
         <View style={{ flexDirection: 'row' }}>
           {([5, 3] as HorizonYears[]).map((hz) => (
-            <Chip key={hz} label={`${hz}yr`} active={horizon === hz} onPress={() => setHorizon(ticker, hz)} />
+            <Chip
+              key={hz}
+              label={`${hz}yr`}
+              active={horizon === hz}
+              onPress={() => {
+                tapHaptic();
+                setHorizon(ticker, hz);
+              }}
+            />
           ))}
         </View>
       </View>
@@ -91,9 +150,16 @@ export default function ValuationScreen() {
       <ResultCard valuation={valuation} priceToday={snapshot.quote.price} horizon={horizon} />
 
       <Card>
-        <SectionTitle>
-          Assumptions · {kind} · {horizon}yr
-        </SectionTitle>
+        <View style={styles.assumTitleRow}>
+          <SectionTitle>
+            Assumptions · {kind} · {horizon}yr
+          </SectionTitle>
+          {hasEdits && (
+            <Pressable onPress={resetToSeeded} hitSlop={8}>
+              <Mono size="xs" color={colors.blue}>↺ reset to seeded</Mono>
+            </Pressable>
+          )}
+        </View>
         <View style={styles.assumHead}>
           <Mono size="xs" color={colors.textFaint}>year</Mono>
           <Mono size="xs" color={colors.textFaint}>rev y/y %</Mono>
@@ -203,6 +269,7 @@ export default function ValuationScreen() {
         </View>
       </Card>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -256,21 +323,38 @@ function ResultCard({
   );
 }
 
+/**
+ * Percent input with ± steppers (0.5pp per tap): editable by keyboard,
+ * but tunable one-thumbed without one.
+ */
 function PctInput({ value, onCommit }: { value: number; onCommit: (v: number) => void }) {
   const [text, setText] = React.useState((value * 100).toFixed(1));
   React.useEffect(() => setText((value * 100).toFixed(1)), [value]);
+  const bump = (dir: 1 | -1) => {
+    tapHaptic();
+    onCommit(Math.round((value + dir * 0.005) * 1000) / 1000);
+  };
   return (
-    <TextInput
-      style={styles.input}
-      value={text}
-      keyboardType="numbers-and-punctuation"
-      onChangeText={setText}
-      onEndEditing={() => {
-        const v = parseFloat(text);
-        if (Number.isFinite(v)) onCommit(v / 100);
-        else setText((value * 100).toFixed(1));
-      }}
-    />
+    <View style={styles.stepper}>
+      <Pressable style={styles.stepBtn} onPress={() => bump(-1)} hitSlop={6}>
+        <Mono size="sm" color={colors.textDim}>−</Mono>
+      </Pressable>
+      <TextInput
+        style={styles.stepInput}
+        value={text}
+        keyboardType="numbers-and-punctuation"
+        onChangeText={setText}
+        selectTextOnFocus
+        onEndEditing={() => {
+          const v = parseFloat(text);
+          if (Number.isFinite(v)) onCommit(v / 100);
+          else setText((value * 100).toFixed(1));
+        }}
+      />
+      <Pressable style={styles.stepBtn} onPress={() => bump(1)} hitSlop={6}>
+        <Mono size="sm" color={colors.textDim}>+</Mono>
+      </Pressable>
+    </View>
   );
 }
 
@@ -297,6 +381,7 @@ function NumRow({
         value={text}
         keyboardType="numbers-and-punctuation"
         onChangeText={setText}
+        selectTextOnFocus
         onEndEditing={() => {
           const v = parseFloat(text);
           if (Number.isFinite(v)) onCommit(v / scale);
@@ -337,6 +422,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     minWidth: 72,
+    textAlign: 'right',
+  },
+  assumTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  stepBtn: {
+    backgroundColor: colors.chipBg,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  stepInput: {
+    backgroundColor: colors.surfaceAlt,
+    color: colors.text,
+    fontFamily: type.mono,
+    fontSize: type.size.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    minWidth: 52,
     textAlign: 'right',
   },
   numRow: {

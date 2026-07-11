@@ -6,43 +6,111 @@
  * per-year fundamentals are immutable once a fiscal year closes, so
  * historical endpoints cache aggressively (30 days), quotes briefly (60s).
  *
+ * Security posture:
+ *  - STRICT endpoint allowlist: only the FMP paths the app actually uses
+ *    are forwarded, with per-endpoint parameter schemas -- the worker is
+ *    not an open proxy for the key.
+ *  - Client-supplied `apikey` params are discarded; the secret is applied
+ *    server-side only and never appears in cache keys or logs.
+ *  - Per-IP rate limiting (KV counter, fixed window) to protect the FMP
+ *    quota from abuse.
+ *  - GET-only, hardened response headers, upstream errors never cached.
+ *
  * Routes:
- *   /fmp/<path>?...        -> https://financialmodelingprep.com/<path>&apikey=SECRET
- *   /edgar/companyfacts/<TICKER> -> SEC EDGAR XBRL company facts (free fallback)
+ *   /fmp/stable/<endpoint>?...       -> financialmodelingprep.com (allowlisted)
+ *   /edgar/companyfacts/<TICKER>     -> SEC EDGAR XBRL company facts (free fallback)
  */
 export interface Env {
   FMP_API_KEY: string;
   CACHE: KVNamespace;
+  /** Optional override, requests/min/IP. Default 60. */
+  RATE_LIMIT_PER_MIN?: string;
 }
 
 const FMP_ORIGIN = 'https://financialmodelingprep.com';
 const EDGAR_ORIGIN = 'https://data.sec.gov';
-// SEC asks for a descriptive UA with contact info.
+// SEC asks for a descriptive UA with contact info; change to your own.
 const EDGAR_UA = 'DeepValueHunter/0.1 (contact: maxpeel9@gmail.com)';
 
-/** Endpoints containing closed-fiscal-year data: cache 30 days. */
-const LONG_CACHE_PATTERNS = [
-  'income-statement',
-  'cash-flow-statement',
-  'balance-sheet-statement',
-  'enterprise-values',
-  'key-metrics',
-  'historical-price-eod',
-  'companyfacts',
-];
-const LONG_TTL = 30 * 24 * 3600;
+const LONG_TTL = 30 * 24 * 3600; // closed fiscal years are immutable
 const SHORT_TTL = 60;
 
-function ttlFor(path: string): number {
-  return LONG_CACHE_PATTERNS.some((p) => path.includes(p)) ? LONG_TTL : SHORT_TTL;
+const SYMBOL_RE = /^[A-Z0-9.\-]{1,10}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+interface ParamRule {
+  required?: boolean;
+  validate: (v: string) => boolean;
 }
 
-function corsHeaders(): Record<string, string> {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
+interface EndpointRule {
+  ttl: number;
+  params: Record<string, ParamRule>;
+}
+
+const symbolParam: ParamRule = { required: true, validate: (v) => SYMBOL_RE.test(v) };
+const periodParam: ParamRule = { validate: (v) => v === 'annual' || v === 'quarter' };
+const limitParam: ParamRule = {
+  validate: (v) => /^\d{1,3}$/.test(v) && Number(v) >= 1 && Number(v) <= 100,
+};
+const dateParam: ParamRule = { validate: (v) => DATE_RE.test(v) };
+
+const statementRule: EndpointRule = {
+  ttl: LONG_TTL,
+  params: { symbol: symbolParam, period: periodParam, limit: limitParam },
+};
+
+/** The ONLY FMP endpoints this worker will forward. */
+const FMP_ALLOWLIST: Record<string, EndpointRule> = {
+  'income-statement': statementRule,
+  'cash-flow-statement': statementRule,
+  'balance-sheet-statement': statementRule,
+  'enterprise-values': statementRule,
+  'key-metrics': statementRule,
+  'key-metrics-ttm': { ttl: SHORT_TTL, params: { symbol: symbolParam } },
+  quote: { ttl: SHORT_TTL, params: { symbol: symbolParam } },
+  'search-symbol': {
+    ttl: LONG_TTL,
+    params: {
+      query: { required: true, validate: (v) => /^[A-Za-z0-9 .\-&]{1,40}$/.test(v) },
+      exchange: { validate: (v) => /^[A-Z,]{1,40}$/.test(v) },
+    },
+  },
+  'historical-price-eod/full': {
+    ttl: LONG_TTL,
+    params: { symbol: symbolParam, from: dateParam, to: dateParam },
+  },
+};
+
+const SECURITY_HEADERS: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'Cache-Control': 'no-store', // client caching handled by the app itself
+};
+
+function reply(body: string, status = 200, extra: Record<string, string> = {}): Response {
+  return new Response(body, {
+    status,
+    headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS, ...extra },
+  });
+}
+
+/** Fixed-window per-IP rate limit backed by KV. Fails open on KV errors. */
+async function rateLimited(env: Env, request: Request): Promise<boolean> {
+  const limit = Number(env.RATE_LIMIT_PER_MIN ?? '60') || 60;
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const windowKey = `rl:${ip}:${Math.floor(Date.now() / 60_000)}`;
+  try {
+    const count = Number((await env.CACHE.get(windowKey)) ?? '0') + 1;
+    if (count > limit) return true;
+    await env.CACHE.put(windowKey, String(count), { expirationTtl: 120 });
+  } catch {
+    // fail open: a KV hiccup must not take the API down
+  }
+  return false;
 }
 
 async function cachedFetch(
@@ -52,77 +120,86 @@ async function cachedFetch(
   doFetch: () => Promise<Response>,
 ): Promise<Response> {
   const hit = await env.CACHE.get(cacheKey);
-  if (hit != null) {
-    return new Response(hit, {
-      headers: { 'Content-Type': 'application/json', 'X-DVH-Cache': 'hit', ...corsHeaders() },
-    });
-  }
+  if (hit != null) return reply(hit, 200, { 'X-DVH-Cache': 'hit' });
   const upstream = await doFetch();
   if (!upstream.ok) {
-    return new Response(await upstream.text(), {
-      status: upstream.status,
-      headers: corsHeaders(),
-    });
+    // Upstream errors are passed through (sans body detail) and NEVER cached.
+    return reply(
+      JSON.stringify({ error: 'upstream', status: upstream.status }),
+      upstream.status === 429 ? 429 : 502,
+    );
   }
   const body = await upstream.text();
   await env.CACHE.put(cacheKey, body, { expirationTtl: ttl });
-  return new Response(body, {
-    headers: { 'Content-Type': 'application/json', 'X-DVH-Cache': 'miss', ...corsHeaders() },
+  return reply(body, 200, { 'X-DVH-Cache': 'miss' });
+}
+
+function handleFmp(env: Env, url: URL): Promise<Response> | Response {
+  const endpoint = url.pathname.replace(/^\/fmp\/stable\//, '');
+  const rule = FMP_ALLOWLIST[endpoint];
+  if (!rule || endpoint.includes('..')) {
+    return reply(JSON.stringify({ error: 'endpoint not allowed' }), 403);
+  }
+  const upstream = new URL(`${FMP_ORIGIN}/stable/${endpoint}`);
+  for (const [name, paramRule] of Object.entries(rule.params)) {
+    const v = url.searchParams.get(name);
+    if (v == null) {
+      if (paramRule.required) {
+        return reply(JSON.stringify({ error: `missing param ${name}` }), 400);
+      }
+      continue;
+    }
+    if (!paramRule.validate(v)) {
+      return reply(JSON.stringify({ error: `invalid param ${name}` }), 400);
+    }
+    upstream.searchParams.set(name, v);
+  }
+  // any params not in the schema (incl. client apikey) are dropped here
+  const cacheKey = `fmp:${endpoint}?${[...upstream.searchParams]
+    .sort()
+    .map(([k, v]) => `${k}=${v}`)
+    .join('&')}`;
+  upstream.searchParams.set('apikey', env.FMP_API_KEY);
+  return cachedFetch(env, cacheKey, rule.ttl, () => fetch(upstream.toString()));
+}
+
+async function handleEdgar(env: Env, ticker: string): Promise<Response> {
+  return cachedFetch(env, `edgar:companyfacts:${ticker}`, LONG_TTL, async () => {
+    const mapRes = await cachedFetch(env, 'edgar:tickermap', LONG_TTL, () =>
+      fetch('https://www.sec.gov/files/company_tickers.json', {
+        headers: { 'User-Agent': EDGAR_UA },
+      }),
+    );
+    const map = (await mapRes.json()) as Record<string, { cik_str: number; ticker: string }>;
+    const entry = Object.values(map).find((e) => e.ticker === ticker);
+    if (!entry) return new Response('unknown ticker', { status: 404 });
+    const cik = String(entry.cik_str).padStart(10, '0');
+    return fetch(`${EDGAR_ORIGIN}/api/xbrl/companyfacts/CIK${cik}.json`, {
+      headers: { 'User-Agent': EDGAR_UA },
+    });
   });
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders() });
+      return new Response(null, { headers: SECURITY_HEADERS });
     }
     if (request.method !== 'GET') {
-      return new Response('method not allowed', { status: 405, headers: corsHeaders() });
+      return reply(JSON.stringify({ error: 'method not allowed' }), 405);
     }
+    if (await rateLimited(env, request)) {
+      return reply(JSON.stringify({ error: 'rate limited' }), 429, { 'Retry-After': '60' });
+    }
+
     const url = new URL(request.url);
-
-    if (url.pathname.startsWith('/fmp/')) {
-      const upstreamPath = url.pathname.slice('/fmp'.length);
-      const upstream = new URL(FMP_ORIGIN + upstreamPath);
-      url.searchParams.forEach((v, k) => {
-        if (k !== 'apikey') upstream.searchParams.set(k, v); // never trust client keys
-      });
-      upstream.searchParams.set('apikey', env.FMP_API_KEY);
-      const cacheKey = `fmp:${upstreamPath}?${[...url.searchParams]
-        .filter(([k]) => k !== 'apikey')
-        .sort()
-        .map(([k, v]) => `${k}=${v}`)
-        .join('&')}`;
-      return cachedFetch(env, cacheKey, ttlFor(upstreamPath), () => fetch(upstream.toString()));
+    if (url.pathname.startsWith('/fmp/stable/')) {
+      return handleFmp(env, url);
     }
-
     const factsMatch = url.pathname.match(/^\/edgar\/companyfacts\/([A-Za-z.\-]{1,10})$/);
     if (factsMatch) {
-      const ticker = factsMatch[1]!.toUpperCase();
-      return cachedFetch(env, `edgar:companyfacts:${ticker}`, LONG_TTL, async () => {
-        // ticker -> CIK via the SEC mapping file (itself cached by KV)
-        const mapRes = await cachedFetch(
-          env,
-          'edgar:tickermap',
-          LONG_TTL,
-          () =>
-            fetch('https://www.sec.gov/files/company_tickers.json', {
-              headers: { 'User-Agent': EDGAR_UA },
-            }),
-        );
-        const map = (await mapRes.json()) as Record<
-          string,
-          { cik_str: number; ticker: string }
-        >;
-        const entry = Object.values(map).find((e) => e.ticker === ticker);
-        if (!entry) return new Response('unknown ticker', { status: 404 });
-        const cik = String(entry.cik_str).padStart(10, '0');
-        return fetch(`${EDGAR_ORIGIN}/api/xbrl/companyfacts/CIK${cik}.json`, {
-          headers: { 'User-Agent': EDGAR_UA },
-        });
-      });
+      return handleEdgar(env, factsMatch[1]!.toUpperCase());
     }
-
-    return new Response('not found', { status: 404, headers: corsHeaders() });
+    return reply(JSON.stringify({ error: 'not found' }), 404);
   },
 };

@@ -81,6 +81,17 @@ export default function CompanyScreen() {
   const momentum =
     own.momentum ?? momentumFromHistory(snapshot.priceHistory, snapshot.snapshotDate);
   const isBundled = snapshot === BUNDLED_META;
+  const ageDays = Math.floor(
+    (Date.now() - new Date(snapshot.snapshotDate).getTime()) / (24 * 3600 * 1000),
+  );
+  const stale = ageDays > 7;
+  const bannerText = isBundled
+    ? `Bundled snapshot ${snapshot.snapshotDate} — pull down to refresh live.`
+    : refresh.isError
+      ? `Refresh failed (${refresh.error instanceof Error ? refresh.error.message : 'network'}). Showing snapshot ${snapshot.snapshotDate}.`
+      : stale
+        ? `Snapshot is ${ageDays} days old (${snapshot.snapshotDate}) — pull down to refresh.`
+        : `Snapshot ${snapshot.snapshotDate} — pull down to refresh.`;
 
   return (
     <ScrollView
@@ -94,11 +105,7 @@ export default function CompanyScreen() {
       }
       contentContainerStyle={{ paddingBottom: space.xl }}
     >
-      <Banner tone={isBundled ? 'warn' : 'info'}>
-        {isBundled
-          ? `Bundled snapshot ${snapshot.snapshotDate} — pull down to refresh live.`
-          : `Snapshot ${snapshot.snapshotDate}${refresh.isError ? ' · refresh failed' : ''} — pull down to refresh.`}
-      </Banner>
+      <Banner tone={isBundled || stale || refresh.isError ? 'warn' : 'info'}>{bannerText}</Banner>
 
       <Card>
         <View style={styles.headRow}>
