@@ -63,6 +63,24 @@ export interface SavedAnalysis {
 
 export const MAX_SAVED_ANALYSES = 200;
 
+/** An Inspiration-page quote (Apple Notes-style block quote). */
+export interface Quote {
+  text: string;
+  attribution: string;
+}
+
+const SEED_QUOTES: Quote[] = [
+  {
+    text:
+      "Investors should remember that their scorecard is not computed using Olympic-diving methods: Degree-of-difficulty doesn't count. If you are right about a business whose value is largely dependent on a single key factor that is both easy to understand and enduring, the payoff is the same as if you had correctly analyzed an investment alternative characterized by many constantly shifting and complex variables.",
+    attribution: 'Warren Buffett',
+  },
+  {
+    text: 'The big money is not in the buying and selling, but in the waiting.',
+    attribution: 'Charlie Munger',
+  },
+];
+
 export interface TickerState {
   /** newest first; index 0 is the live view unless a pin is set */
   snapshots: CompanySnapshot[];
@@ -91,6 +109,10 @@ interface AppState {
    */
   devFmpApiKey: string;
   devMode: boolean;
+  /** Inspiration-page quotes, user-editable, seeded with two classics. */
+  quotes: Quote[];
+  addQuote: (text: string, attribution: string) => void;
+  removeQuote: (idx: number) => void;
   /** Frozen analyses (Company + Valuation state), newest first. */
   savedAnalyses: SavedAnalysis[];
   /** When set, Company/Valuation render this frozen state read-only. */
@@ -159,6 +181,17 @@ export const useAppStore = create<AppState>()(
       devMode: false,
       savedAnalyses: [],
       reviewingId: null,
+      quotes: SEED_QUOTES,
+
+      addQuote: (text, attribution) => {
+        const t = text.trim();
+        if (!t) return;
+        set((s) => ({
+          quotes: [...s.quotes, { text: t, attribution: attribution.trim() }],
+        }));
+      },
+      removeQuote: (idx) =>
+        set((s) => ({ quotes: s.quotes.filter((_, i) => i !== idx) })),
 
       saveAnalysis: () => {
         const s = get();

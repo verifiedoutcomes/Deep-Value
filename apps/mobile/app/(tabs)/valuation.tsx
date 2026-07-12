@@ -44,6 +44,7 @@ import { tapHaptic, toggleHaptic } from '../../src/haptics';
 import { colors, deltaColor, space, type } from '../../src/theme';
 import { Banner, Card, Chip, Mono, SectionTitle } from '../../src/components/ui';
 import { AnalysisBar } from '../../src/components/AnalysisBar';
+import { CapexInfoTag } from '../../src/components/CapexInfo';
 import { FormulaProvider, InfoTag } from '../../src/components/FormulaInfo';
 import {
   adjFcfMarginFormula,
@@ -219,11 +220,18 @@ export default function ValuationScreen() {
           fcfRate={fcfRate}
           setYear={setYear}
         />
-        <View style={{ paddingHorizontal: space.md }}>
+        <View
+          style={{
+            paddingHorizontal: space.md,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
           <Mono size="xs" color={colors.textFaint}>
             boxed cells are yours to edit · tap ⓘ to follow any calculation
-            {capexTreatment === 'sheet' ? ' · Adj FCF = OCF + |capex| − SBC (sheet default)' : ''}
           </Mono>
+          <CapexInfoTag />
         </View>
       </Card>
 

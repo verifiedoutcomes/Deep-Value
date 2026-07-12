@@ -1,15 +1,13 @@
-/** Settings: capex treatment, snapshot pinning, proxy URL, dev tools. */
+/** Settings: inspiration, snapshot pinning, proxy URL, dev tools, legal. */
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Link } from 'expo-router';
 import { useAppStore, activeSnapshot } from '../src/store';
 import { colors, space, type } from '../src/theme';
-import { Banner, Card, Chip, Mono, SectionTitle } from '../src/components/ui';
+import { Card, Mono, SectionTitle } from '../src/components/ui';
 import { toggleHaptic } from '../src/haptics';
 
 export default function SettingsScreen() {
-  const capexTreatment = useAppStore((s) => s.capexTreatment);
-  const setCapexTreatment = useAppStore((s) => s.setCapexTreatment);
   const devMode = useAppStore((s) => s.devMode);
   const setDevMode = useAppStore((s) => s.setDevMode);
   const proxyBaseUrl = useAppStore((s) => s.proxyBaseUrl);
@@ -22,35 +20,28 @@ export default function SettingsScreen() {
   const tickerState = useAppStore((s) => s.tickers[ticker]);
   const pinSnapshot = useAppStore((s) => s.pinSnapshot);
   const active = activeSnapshot(tickerState);
+  const firstQuote = useAppStore((s) => {
+    const q = s.quotes[0]?.text ?? 'add a quote…';
+    return q.length > 64 ? `${q.slice(0, 64)}…` : q;
+  });
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: space.xl }}>
       <Card>
-        <SectionTitle>Capex treatment</SectionTitle>
-        <View style={{ flexDirection: 'row', marginBottom: space.sm }}>
-          <Chip
-            label="Sheet: OCF + |capex| − SBC"
-            active={capexTreatment === 'sheet'}
-            onPress={() => {
-              toggleHaptic();
-              setCapexTreatment('sheet');
-            }}
-          />
-          <Chip
-            label="OCF − |capex| − SBC"
-            active={capexTreatment === 'conventional'}
-            onPress={() => {
-              toggleHaptic();
-              setCapexTreatment('conventional');
-            }}
-          />
-        </View>
-        <Mono size="xs" color={colors.textFaint}>
-          The sheet stores capex as a negative number and computes Adj FCF as OCF − capex − SBC,
-          which ADDS the absolute value of capex back. That is the model this app replicates and
-          the default. The conventional alternative subtracts capex. Changing this reprices
-          everything downstream.
-        </Mono>
+        <Link href="/inspiration" asChild>
+          <Pressable
+            style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+            accessibilityRole="link"
+          >
+            <View style={{ flex: 1, paddingRight: space.md }}>
+              <SectionTitle>✦ Inspiration</SectionTitle>
+              <Text style={styles.quotePreview} numberOfLines={1}>
+                “{firstQuote}”
+              </Text>
+            </View>
+            <Mono size="md" color={colors.textFaint}>›</Mono>
+          </Pressable>
+        </Link>
       </Card>
 
       <Card>
@@ -145,19 +136,23 @@ export default function SettingsScreen() {
         )}
       </Card>
 
-      <Banner tone="warn">
-        Deep Value Hunter provides information and modelling tools only. Nothing in this app is
-        investment advice or a recommendation to buy or sell any security. Data may be delayed or
-        inaccurate; verify before acting. Investing involves risk, including loss of principal.
-      </Banner>
-
       <Card>
+        <SectionTitle>About · Legal</SectionTitle>
+        <Mono size="xs" color={colors.textDim}>
+          Deep Value Hunter v0.1.0 — a faithful mobile port of the DVH valuation model. It
+          provides information and modelling tools only: nothing in this app is investment advice
+          or a recommendation to buy or sell any security. Data may be delayed or inaccurate;
+          verify before acting. Investing involves risk, including loss of principal.
+        </Mono>
+        <View style={{ height: space.sm }} />
         <Pressable
           onPress={() => setShowDisclaimer((v) => !v)}
           accessibilityRole="button"
           style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
         >
-          <SectionTitle>Legal · full investment disclaimer</SectionTitle>
+          <Mono size="xs" color={colors.textFaint} bold>
+            FULL INVESTMENT DISCLAIMER
+          </Mono>
           <Mono size="sm" color={colors.textFaint}>{showDisclaimer ? '▾' : '▸'}</Mono>
         </Pressable>
         {showDisclaimer && (
@@ -197,6 +192,11 @@ function maskKey(key: string): string {
 }
 
 const styles = StyleSheet.create({
+  quotePreview: {
+    color: colors.textDim,
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
   snapRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -322,7 +322,19 @@ disagreed, **the file won**; those cases are called out explicitly.
     free tier, engine clean end-to-end. This is both the licensing
     escape hatch and negotiating leverage on any display-license quote.
 
-43. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+43. **Inspiration page + Settings rework (2026-07-12).** An Apple
+    Notes-style Inspiration page (serif block quotes with a left rule,
+    "— attribution" beneath, add-your-own composer, long-press remove)
+    sits at the top of Settings, seeded with the owner's Buffett and
+    Munger quotes ("Olym-pic-diving" in the supplied text was a PDF
+    line-break artifact, normalised to "Olympic-diving"). The capex
+    treatment card moved OUT of Settings into a ⓘ bubble beside the
+    Adj FCF note on the Company and Valuation tabs — the toggle now
+    lives where the convention is actually used. About and the legal
+    disclaimer merged into a single "About · Legal" card with the full
+    10-section disclaimer still collapsed beneath it.
+
+44. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.

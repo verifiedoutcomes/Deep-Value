@@ -22,6 +22,7 @@ import { colors, deltaColor, space, type } from '../../src/theme';
 import { tapHaptic } from '../../src/haptics';
 import { Banner, Card, Chip, KV, Mono, SectionTitle } from '../../src/components/ui';
 import { AnalysisBar } from '../../src/components/AnalysisBar';
+import { CapexInfoTag } from '../../src/components/CapexInfo';
 import { PriceChart } from '../../src/components/PriceChart';
 import { Sparkline } from '../../src/components/Sparkline';
 import { money, num, pct, pctSigned, price, ratio, shares } from '../../src/format';
@@ -181,9 +182,10 @@ export default function CompanyScreen() {
 
       <Card style={{ paddingHorizontal: 0 }}>
         <View style={{ paddingHorizontal: space.md }}>
-          <SectionTitle>
-            Historical Data{capexTreatment === 'sheet' ? '  ·  Adj FCF = OCF + |capex| − SBC (sheet default)' : ''}
-          </SectionTitle>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <SectionTitle>Historical Data</SectionTitle>
+            <CapexInfoTag />
+          </View>
           <Mono size="xs" color={colors.textFaint}>
             tap a column header to chart that metric
           </Mono>

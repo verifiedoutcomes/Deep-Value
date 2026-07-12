@@ -30,6 +30,7 @@ export default function RootLayout() {
           name="saved"
           options={{ presentation: 'modal', title: 'Saved Analyses' }}
         />
+        <Stack.Screen name="inspiration" options={{ title: 'Inspiration' }} />
         <Stack.Screen
           name="dev-parity"
           options={{ presentation: 'modal', title: 'Data Parity (dev)' }}
