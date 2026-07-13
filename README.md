@@ -15,7 +15,7 @@ symbol/FX architecture ready for other markets later.
 packages/engine   pure TS valuation engine (no React, no network) + META fixture + gate tests
 packages/data     provider abstraction: FMP adapter, SEC EDGAR fallback, FX, snapshot assembly
 apps/api          Cloudflare Worker proxy (holds the FMP key, caches responses)
-apps/mobile       Expo app (expo-router, zustand, React Query, react-native-svg)
+apps/mobile       Expo SDK 54 app (RN 0.81 / React 19, expo-router v6, zustand, React Query, react-native-svg)
 scripts/          fixture extraction from the xlsx (openpyxl)
 DECISIONS.md      every judgement call, incl. replicated sheet quirks
 ```

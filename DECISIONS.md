@@ -334,7 +334,18 @@ disagreed, **the file won**; those cases are called out explicitly.
     disclaimer merged into a single "About · Legal" card with the full
     10-section disclaimer still collapsed beneath it.
 
-44. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+44. **Expo SDK 54 upgrade (2026-07-13).** apps/mobile moved from SDK 52
+    to 54: React Native 0.81.5, React 19.1.0, expo-router 6, TypeScript
+    5.9, New Architecture enabled explicitly. Versions aligned with
+    `expo install --fix`; a root `overrides.react = 19.1.0` pins a
+    single React across the workspace (npm was hoisting a newer 19.x
+    for peer ranges). Zero code changes were needed — the app
+    typechecks clean under React 19 and Metro exports a full Hermes
+    bundle. expo-doctor's one remaining note is the intentional
+    monorepo metro.config.js (watchFolders/nodeModulesPaths per Expo's
+    own monorepo guidance).
+
+45. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.
