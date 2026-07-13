@@ -6,7 +6,17 @@
  * chip to delete the group.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Animated,
+  FlatList,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import { analyzeCompany } from '@dvh/engine';
 import { activeSnapshot, MAX_GROUP_SIZE, useAppStore } from '../../src/store';
@@ -18,6 +28,92 @@ import { pct, price, ratio } from '../../src/format';
 import { tapHaptic, warningHaptic } from '../../src/haptics';
 
 const ROW_HEIGHT = 56;
+const DELETE_W = 84;
+
+/** Tickers are typed with $ prefixes and stray spaces; normalise them. */
+function normalizeTicker(raw: string): string {
+  return raw.trim().toUpperCase().replace(/^\$+/, '');
+}
+
+/**
+ * Swipe-left-to-delete row (PanResponder + Animated — no extra native
+ * deps, works in Expo Go). Horizontal drags reveal a Remove button;
+ * vertical drags stay with the list scroll.
+ */
+function SwipeableRow({
+  children,
+  onDelete,
+}: {
+  children: React.ReactNode;
+  onDelete: () => void;
+}) {
+  const tx = useRef(new Animated.Value(0)).current;
+  const openRef = useRef(false);
+  const settle = (open: boolean) => {
+    openRef.current = open;
+    Animated.spring(tx, {
+      toValue: open ? -DELETE_W : 0,
+      useNativeDriver: true,
+      bounciness: 0,
+      speed: 24,
+    }).start();
+  };
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      onPanResponderMove: (_e, g) => {
+        const base = openRef.current ? -DELETE_W : 0;
+        tx.setValue(Math.min(0, Math.max(-DELETE_W - 24, base + g.dx)));
+      },
+      onPanResponderRelease: (_e, g) => {
+        const end = (openRef.current ? -DELETE_W : 0) + g.dx;
+        settle(end < -DELETE_W / 2);
+      },
+      onPanResponderTerminate: () => settle(openRef.current),
+    }),
+  ).current;
+
+  return (
+    <View style={{ height: ROW_HEIGHT }}>
+      <View style={swipeStyles.deleteUnder}>
+        <Pressable
+          style={swipeStyles.deleteBtn}
+          onPress={() => {
+            warningHaptic();
+            settle(false);
+            onDelete();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="remove from watchlist"
+        >
+          <Mono size="sm" color={colors.text} bold>Remove</Mono>
+        </Pressable>
+      </View>
+      <Animated.View
+        style={{ transform: [{ translateX: tx }], backgroundColor: colors.bg }}
+        {...pan.panHandlers}
+      >
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
+
+const swipeStyles = StyleSheet.create({
+  deleteUnder: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    backgroundColor: colors.red,
+  },
+  deleteBtn: {
+    width: DELETE_W,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
 
 function WatchRow({ ticker }: { ticker: string }) {
   const router = useRouter();
@@ -134,11 +230,14 @@ export default function WatchlistScreen() {
   const addGroup = useAppStore((s) => s.addGroup);
   const removeGroup = useAppStore((s) => s.removeGroup);
   const addToWatchlist = useAppStore((s) => s.addToWatchlist);
-  const search = useTickerSearch(query);
+  // Search with the normalised ticker ("$MSFT " -> "MSFT"): FMP returns
+  // nothing for $-prefixed queries.
+  const search = useTickerSearch(normalizeTicker(query));
 
   const activeGroup = groups.find((g) => g.name === activeGroupName) ?? groups[0];
   const tickers = activeGroup?.tickers ?? [];
   const allTickers = useMemo(() => new Set(groups.flatMap((g) => g.tickers)), [groups]);
+  const removeFromWatchlist = useAppStore((s) => s.removeFromWatchlist);
 
   const tryAdd = (t: string) => {
     const err = addToWatchlist(t);
@@ -152,7 +251,7 @@ export default function WatchlistScreen() {
   };
 
   const addManual = () => {
-    const t = query.trim().toUpperCase();
+    const t = normalizeTicker(query);
     if (/^[A-Z.\-]{1,10}$/.test(t)) tryAdd(t);
   };
 
@@ -168,7 +267,7 @@ export default function WatchlistScreen() {
     }
   };
 
-  const q = query.trim().toUpperCase();
+  const q = normalizeTicker(query);
   const visible = useMemo(() => {
     const filtered = q ? tickers.filter((t) => t.includes(q)) : [...tickers];
     if (sort === 'az') filtered.sort();
@@ -207,8 +306,8 @@ export default function WatchlistScreen() {
           </Pressable>
         </Link>
         <Link href="/settings" asChild>
-          <Pressable style={styles.gear}>
-            <Mono size="lg" color={colors.textDim}>⚙</Mono>
+          <Pressable style={styles.gear} accessibilityLabel="settings">
+            <Mono size="xl" color={colors.accent}>⚙</Mono>
           </Pressable>
         </Link>
       </View>
@@ -274,6 +373,18 @@ export default function WatchlistScreen() {
 
       {q.length > 0 && (
         <View style={styles.results}>
+          {search.isLoading && (
+            <View style={styles.resultRow}>
+              <Mono size="sm" color={colors.textFaint}>searching…</Mono>
+            </View>
+          )}
+          {search.isError && (
+            <View style={styles.resultRow}>
+              <Mono size="xs" color={colors.red}>
+                search failed — check the API key / proxy in Settings
+              </Mono>
+            </View>
+          )}
           {newResults.map((r) => (
             <Pressable key={r.ticker} style={styles.resultRow} onPress={() => tryAdd(r.ticker)}>
               <Mono size="sm">+ {r.ticker}</Mono>
@@ -292,7 +403,11 @@ export default function WatchlistScreen() {
       <FlatList
         data={visible}
         keyExtractor={(t) => t}
-        renderItem={({ item }) => <WatchRow ticker={item} />}
+        renderItem={({ item }) => (
+          <SwipeableRow onDelete={() => removeFromWatchlist(item)}>
+            <WatchRow ticker={item} />
+          </SwipeableRow>
+        )}
         contentContainerStyle={{ paddingBottom: space.xl }}
         getItemLayout={(_d, index) => ({
           length: ROW_HEIGHT,
@@ -311,8 +426,8 @@ export default function WatchlistScreen() {
                 : `${activeGroup?.name} is empty.`}
             </Mono>
             <Mono size="xs" color={colors.textFaint}>
-              Search above, or type a ticker and hit return. Long-press a row to move or remove
-              it; long-press a group chip to delete the group.
+              Search above, or type a ticker and hit return. Swipe a row left to remove it;
+              long-press to move it between groups; long-press a group chip to delete the group.
             </Mono>
           </View>
         }

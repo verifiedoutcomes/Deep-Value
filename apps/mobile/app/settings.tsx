@@ -45,7 +45,7 @@ export default function SettingsScreen() {
       </Card>
 
       <Card>
-        <SectionTitle>Snapshots · {ticker}</SectionTitle>
+        <SectionTitle>Snapshots</SectionTitle>
         {(tickerState?.snapshots ?? []).map((s) => {
           const pinned = tickerState?.pinnedSnapshotDate === s.snapshotDate;
           const isActive = s === active;
@@ -68,8 +68,8 @@ export default function SettingsScreen() {
           );
         })}
         <Mono size="xs" color={colors.textFaint}>
-          Every live refresh persists a timestamped snapshot. Pin one to freeze the analysis
-          (the sheet's Static mode); unpin to follow the newest pull.
+          Snapshots for the company currently open ({ticker}). Every live refresh persists a
+          timestamped snapshot; pin one to freeze the analysis, unpin to follow the newest pull.
         </Mono>
       </Card>
 
@@ -130,7 +130,7 @@ export default function SettingsScreen() {
         {devMode && (
           <Link href="/dev-parity" asChild>
             <Pressable>
-              <Mono size="sm" color={colors.blue}>→ Live-data parity vs bundled META fixture</Mono>
+              <Mono size="sm" color={colors.blue}>→ Live-data parity vs bundled fixture</Mono>
             </Pressable>
           </Link>
         )}
