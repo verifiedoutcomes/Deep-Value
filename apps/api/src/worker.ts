@@ -43,6 +43,11 @@ export interface Env {
    * FMP). Flipping this needs NO app update.
    */
   DATA_SOURCE?: string;
+  /**
+   * Distinct tickers a device may load per UTC day via /bundle.
+   * Raise it later without an app update. Default 5.
+   */
+  DAILY_TICKER_QUOTA?: string;
 }
 
 const FMP_ORIGIN = 'https://financialmodelingprep.com';
@@ -204,9 +209,54 @@ function bundleProvider(env: Env): DataProvider {
   return new EdgarFirstProvider(edgar, fmp);
 }
 
-async function handleBundle(env: Env, ticker: string): Promise<Response> {
+/**
+ * Server-enforced daily quota: N DISTINCT tickers per device per UTC day
+ * (repeat pulls of the same ticker that day are free — they're cache hits
+ * and legitimate re-checks). Device = the app's Keychain-persisted install
+ * id; falls back to client IP when the header is absent, so the quota
+ * cannot be dodged just by omitting it.
+ */
+async function checkQuota(
+  env: Env,
+  request: Request,
+  ticker: string,
+): Promise<{ ok: boolean; remaining: number }> {
+  const limit = Number(env.DAILY_TICKER_QUOTA ?? '5') || 5;
+  const device =
+    request.headers.get('X-DVH-Device')?.slice(0, 64) ??
+    `ip:${request.headers.get('CF-Connecting-IP') ?? 'unknown'}`;
+  const day = new Date().toISOString().slice(0, 10);
+  const counterKey = `quota:${device}:${day}`;
+  const tickerKey = `${counterKey}:${ticker}`;
+  try {
+    if ((await env.CACHE.get(tickerKey)) != null) {
+      const used = Number((await env.CACHE.get(counterKey)) ?? '0');
+      return { ok: true, remaining: Math.max(0, limit - used) };
+    }
+    const used = Number((await env.CACHE.get(counterKey)) ?? '0');
+    if (used >= limit) return { ok: false, remaining: 0 };
+    await env.CACHE.put(counterKey, String(used + 1), { expirationTtl: 2 * 24 * 3600 });
+    await env.CACHE.put(tickerKey, '1', { expirationTtl: 2 * 24 * 3600 });
+    return { ok: true, remaining: Math.max(0, limit - used - 1) };
+  } catch {
+    return { ok: true, remaining: limit }; // KV hiccup: fail open
+  }
+}
+
+async function handleBundle(env: Env, request: Request, ticker: string): Promise<Response> {
+  const quota = await checkQuota(env, request, ticker);
+  if (!quota.ok) {
+    return reply(
+      JSON.stringify({
+        error: 'quota',
+        message: `Daily limit reached: ${env.DAILY_TICKER_QUOTA ?? 5} tickers per day. Resets at midnight UTC.`,
+      }),
+      429,
+      { 'Retry-After': '3600', 'X-DVH-Quota-Remaining': '0' },
+    );
+  }
   const source = (env.DATA_SOURCE ?? 'fmp') === 'edgar-first' ? 'edgar' : 'fmp';
-  return cachedFetch(env, `bundle:${source}:${ticker}`, BUNDLE_TTL, async () => {
+  const res = await cachedFetch(env, `bundle:${source}:${ticker}`, BUNDLE_TTL, async () => {
     const provider = bundleProvider(env);
     try {
       const snapshot = await loadCompanySnapshot(
@@ -221,6 +271,8 @@ async function handleBundle(env: Env, ticker: string): Promise<Response> {
       return new Response(JSON.stringify({ error: String(e) }), { status: 502 });
     }
   });
+  res.headers.set('X-DVH-Quota-Remaining', String(quota.remaining));
+  return res;
 }
 
 async function handleEdgar(env: Env, ticker: string): Promise<Response> {
@@ -255,7 +307,7 @@ export default {
     const url = new URL(request.url);
     const bundleMatch = url.pathname.match(/^\/bundle\/([A-Za-z0-9.\-]{1,10})$/);
     if (bundleMatch) {
-      return handleBundle(env, bundleMatch[1]!.toUpperCase());
+      return handleBundle(env, request, bundleMatch[1]!.toUpperCase());
     }
     if (url.pathname.startsWith('/fmp/stable/')) {
       return handleFmp(env, url);

@@ -363,7 +363,25 @@ disagreed, **the file won**; those cases are called out explicitly.
     above a cheap stock; IRR capitalised throughout; save/saved bar made
     prominent and centred.
 
-46. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+46. **Data-spend controls (2026-07-13).** Two layers, because
+    client-side limits alone are advisory:
+    - CLIENT freshness gate: a refresh within 6 hours of a ticker's last
+      live pull never touches the network — the app explains when the
+      next update unlocks. Developer mode bypasses.
+    - SERVER quota: /bundle enforces N distinct tickers per device per
+      UTC day (env `DAILY_TICKER_QUOTA`, default 5 — raisable without an
+      app update). Repeat pulls of the same ticker that day are free.
+      Device = a Keychain-persisted install id (reinstalls do NOT mint a
+      fresh quota); requests without the header fall back to per-IP
+      quota, so omitting it is not a bypass. 429 carries a friendly
+      message; X-DVH-Quota-Remaining is surfaced in Settings.
+    Known residual loopholes (accepted for now, documented): spoofable
+    install ids (mitigation when it matters: per-IP layer already
+    caps it; later App Attest / receipt-gating), and the /fmp
+    passthrough is quota-free but endpoint-allowlisted and per-IP
+    rate-limited.
+
+47. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.

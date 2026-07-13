@@ -20,6 +20,7 @@ export default function SettingsScreen() {
   const tickerState = useAppStore((s) => s.tickers[ticker]);
   const pinSnapshot = useAppStore((s) => s.pinSnapshot);
   const active = activeSnapshot(tickerState);
+  const quotaRemaining = useAppStore((s) => s.quotaRemaining);
   const firstQuote = useAppStore((s) => {
     const q = s.quotes[0]?.text ?? 'add a quote…';
     return q.length > 64 ? `${q.slice(0, 64)}…` : q;
@@ -34,12 +35,12 @@ export default function SettingsScreen() {
             accessibilityRole="link"
           >
             <View style={{ flex: 1, paddingRight: space.md }}>
-              <SectionTitle>✦ Inspiration</SectionTitle>
+              <Mono size="lg" color={colors.accent} bold>✦ Inspiration</Mono>
               <Text style={styles.quotePreview} numberOfLines={1}>
                 “{firstQuote}”
               </Text>
             </View>
-            <Mono size="md" color={colors.textFaint}>›</Mono>
+            <Mono size="lg" color={colors.accent}>›</Mono>
           </Pressable>
         </Link>
       </Card>
@@ -94,6 +95,12 @@ export default function SettingsScreen() {
           All provider calls route through the serverless proxy (apps/api); no API key is stored
           in this app. https only.
         </Mono>
+        {quotaRemaining != null && (
+          <Mono size="xs" color={quotaRemaining > 0 ? colors.textDim : colors.amber}>
+            {quotaRemaining} live ticker update{quotaRemaining === 1 ? '' : 's'} left today ·
+            prices refresh at most every 6h per company
+          </Mono>
+        )}
         <View style={{ height: space.sm }} />
         <SectionTitle>FMP API key (dev only)</SectionTitle>
         <TextInput

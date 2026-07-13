@@ -109,6 +109,18 @@ interface AppState {
    */
   devFmpApiKey: string;
   devMode: boolean;
+  /**
+   * Anonymous install id sent with proxy requests so the server can
+   * enforce the daily ticker quota. Persisted in the Keychain so a
+   * reinstall does NOT mint a fresh quota.
+   */
+  installId: string;
+  /** Last successful live pull per ticker (ms epoch) — freshness gate. */
+  lastFetchAt: Record<string, number>;
+  markFetched: (ticker: string) => void;
+  /** Server-reported quota remaining today (null until first pull). */
+  quotaRemaining: number | null;
+  setQuotaRemaining: (n: number | null) => void;
   /** Inspiration-page quotes, user-editable, seeded with two classics. */
   quotes: Quote[];
   addQuote: (text: string, attribution: string) => void;
@@ -181,6 +193,12 @@ export const useAppStore = create<AppState>()(
       devMode: false,
       savedAnalyses: [],
       reviewingId: null,
+      installId: '',
+      lastFetchAt: {},
+      quotaRemaining: null,
+      markFetched: (ticker) =>
+        set((s) => ({ lastFetchAt: { ...s.lastFetchAt, [ticker]: Date.now() } })),
+      setQuotaRemaining: (quotaRemaining) => set({ quotaRemaining }),
       quotes: SEED_QUOTES,
 
       addQuote: (text, attribution) => {
@@ -426,6 +444,13 @@ export const useAppStore = create<AppState>()(
 );
 
 const SECURE_KEY_NAME = 'dvh.fmp.apikey';
+const INSTALL_ID_NAME = 'dvh.install.id';
+
+function randomId(): string {
+  let out = '';
+  for (let i = 0; i < 32; i++) out += Math.floor(Math.random() * 16).toString(16);
+  return out;
+}
 
 /** Load Keychain-held secrets into the in-memory store at app start. */
 export async function hydrateSecureState(): Promise<void> {
@@ -434,6 +459,19 @@ export async function hydrateSecureState(): Promise<void> {
     if (key) useAppStore.setState({ devFmpApiKey: key });
   } catch {
     // SecureStore unavailable: dev key simply stays unset
+  }
+  try {
+    let id = await SecureStore.getItemAsync(INSTALL_ID_NAME);
+    if (!id) {
+      id = randomId();
+      await SecureStore.setItemAsync(INSTALL_ID_NAME, id, {
+        keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+      });
+    }
+    useAppStore.setState({ installId: id });
+  } catch {
+    // no Keychain (web preview): per-session id, quota falls back to IP
+    useAppStore.setState({ installId: randomId() });
   }
 }
 

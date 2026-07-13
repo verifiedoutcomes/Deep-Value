@@ -47,15 +47,34 @@ export function symbolFor(ticker: string): SymbolRef {
   return { ticker: ticker.toUpperCase(), exchange: 'US', reportingCurrency: 'USD' };
 }
 
+/**
+ * Prices barely matter intraday for a deep-value model: a refresh inside
+ * this window serves the existing snapshot instead of spending an API
+ * call. Developer mode bypasses it.
+ */
+export const FRESHNESS_HOURS = 6;
+
 export async function pullSnapshot(ticker: string): Promise<CompanySnapshot> {
   const proxy = proxyBaseUrl();
   if (proxy) {
     // One request per company open: the proxy assembles and caches the
     // whole snapshot, so upstream provider cost is per-ticker, not
-    // per-user, and no API key exists anywhere near the client.
+    // per-user, and no API key exists anywhere near the client. The
+    // Keychain-persisted install id lets the server enforce the daily
+    // ticker quota (survives reinstalls).
     const res = await fetch(
       `${proxy.replace(/\/$/, '')}/bundle/${encodeURIComponent(ticker.toUpperCase())}`,
+      { headers: { 'X-DVH-Device': useAppStore.getState().installId } },
     );
+    const remaining = Number(res.headers.get('X-DVH-Quota-Remaining'));
+    if (Number.isFinite(remaining)) {
+      useAppStore.getState().setQuotaRemaining(remaining);
+    }
+    if (res.status === 429) {
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
+      useAppStore.getState().setQuotaRemaining(0);
+      throw new Error(body?.message ?? 'Daily live-update limit reached. Resets at midnight UTC.');
+    }
     if (!res.ok) throw new Error(`bundle ${ticker}: HTTP ${res.status}`);
     return (await res.json()) as CompanySnapshot;
   }
@@ -63,13 +82,36 @@ export async function pullSnapshot(ticker: string): Promise<CompanySnapshot> {
   return loadCompanySnapshot(makeProvider(), symbolFor(ticker), new UsdOnlyFxTable());
 }
 
-/** Refresh action: pull live data and persist it as a timestamped snapshot. */
+/**
+ * Refresh action: pull live data and persist it as a timestamped
+ * snapshot. Refreshes inside the freshness window don't touch the
+ * network at all (developer mode bypasses).
+ */
 export function useRefreshSnapshot(ticker: string) {
   const addSnapshot = useAppStore((s) => s.addSnapshot);
+  const markFetched = useAppStore((s) => s.markFetched);
   return useMutation({
-    mutationFn: () => pullSnapshot(ticker),
+    mutationFn: async () => {
+      const { lastFetchAt, devMode } = useAppStore.getState();
+      const last = lastFetchAt[ticker.toUpperCase()];
+      if (!devMode && last != null) {
+        const ageMs = Date.now() - last;
+        if (ageMs < FRESHNESS_HOURS * 3600 * 1000) {
+          const nextAt = new Date(last + FRESHNESS_HOURS * 3600 * 1000);
+          const ageH = Math.floor(ageMs / 3600_000);
+          const ageM = Math.floor((ageMs % 3600_000) / 60_000);
+          const hh = String(nextAt.getHours()).padStart(2, '0');
+          const mm = String(nextAt.getMinutes()).padStart(2, '0');
+          throw new Error(
+            `Prices are fresh (updated ${ageH ? `${ageH}h ` : ''}${ageM}m ago). Next live update after ${hh}:${mm}.`,
+          );
+        }
+      }
+      return pullSnapshot(ticker);
+    },
     onSuccess: (snap) => {
       successHaptic();
+      markFetched(ticker.toUpperCase());
       addSnapshot(ticker, snap);
     },
     onError: () => warningHaptic(),
