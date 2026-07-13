@@ -156,13 +156,13 @@ export function computeScenarioValuation(
   const terminalMarketCap =
     terminalEv - anchors.netDebt + inputs.adjustmentMillions * 1_000_000; // N65
 
-  // N67 / N92: sum of FCF PVs + PV(rate, 5, 0, -terminal cap).
-  // QUIRK (replicated for fixture parity): the sheet's 3-year block N92
-  // still uses nper = 5 in its PV term, discounting the 3-year terminal
-  // market cap FIVE periods instead of three.
+  // N67 / N92: sum of FCF PVs + PV(rate, terminalNper, 0, -terminal cap).
+  // Sheet-parity mode passes terminalNper = 5 even for the 3-year block
+  // (the sheet's N92 quirk, required by the META gate); corrected mode
+  // passes the horizon length so a 3-year model discounts 3 periods.
   const intrinsicValue =
     forecast.reduce((a, f) => a + f.pvOfAdjFcf, 0) +
-    pvExcel(inputs.terminalDiscountRate, 5, 0, -terminalMarketCap);
+    pvExcel(inputs.terminalDiscountRate, inputs.terminalNper, 0, -terminalMarketCap);
 
   // "No Forecast" gate: countif(G..:H..,"=0") = 10. Only the 5-year blocks
   // have 10 margin cells; the 3-year blocks compare a 6-cell range against

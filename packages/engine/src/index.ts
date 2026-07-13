@@ -40,6 +40,24 @@ import {
 export const DEFAULT_DISCOUNT_RATE = 0.1; // N66 / N91
 export const DEFAULT_MOS_THRESHOLDS = [0.15, 0.2, 0.3]; // R10:T10
 
+/**
+ * Behaviour switches. Defaults replicate the SHEET exactly (the META gate
+ * depends on that); the app opts into the corrected/ergonomic behaviour.
+ */
+export interface AnalyzeOptions {
+  /**
+   * true: the 3-year terminal cap is discounted 3 periods (correct);
+   * false (default): 5 periods, replicating the sheet's N92 nper quirk.
+   */
+  correct3yTerminal?: boolean;
+  /**
+   * true: unedited Bear/Bull seed from the Base case (same growth/margins
+   * and exit multiple), so users adjust from a live starting point;
+   * false (default): sheet behaviour — zeros, rendering "No Forecast".
+   */
+  seedBearBullFromBase?: boolean;
+}
+
 /** Per-ticker user-editable state persisted by the app. */
 export interface ScenarioOverrides {
   years?: Partial<Record<ScenarioKind, Partial<Record<HorizonYears, ScenarioInputs['years']>>>>;
@@ -69,15 +87,17 @@ export function buildScenarioInputs(
   horizon: HorizonYears,
   overrides: ScenarioOverrides = {},
   seededExitMultiple5: number,
+  options: AnalyzeOptions = {},
 ): ScenarioInputs {
+  const seedFromBase = kind === 'base' || options.seedBearBullFromBase === true;
   const rate5 = overrides.discountRate5 ?? DEFAULT_DISCOUNT_RATE;
   const rate3 = overrides.discountRate3 ?? DEFAULT_DISCOUNT_RATE;
-  const exit5 = overrides.exitMultiple5?.[kind] ?? (kind === 'base' ? seededExitMultiple5 : 0);
+  const exit5 = overrides.exitMultiple5?.[kind] ?? (seedFromBase ? seededExitMultiple5 : 0);
   const exitMultiple =
     horizon === 5 ? exit5 : overrides.exitMultiple3?.[kind] ?? derive3yExitMultiple(kind, exit5);
   const years =
     overrides.years?.[kind]?.[horizon] ??
-    (kind === 'base' ? seedBaseScenario(derived, horizon) : seedEmptyScenario(horizon));
+    (seedFromBase ? seedBaseScenario(derived, horizon) : seedEmptyScenario(horizon));
   return {
     years,
     exitMultiple,
@@ -86,6 +106,7 @@ export function buildScenarioInputs(
     // blocks uses the 3-year rate cell N91.
     fcfDiscountRate: rate5,
     terminalDiscountRate: horizon === 5 ? rate5 : rate3,
+    terminalNper: horizon === 5 ? 5 : options.correct3yTerminal ? 3 : 5,
     adjustmentMillions: overrides.adjustmentMillions?.[kind]?.[horizon] ?? 0,
   };
 }
@@ -95,6 +116,7 @@ export function analyzeCompany(
   snapshot: CompanySnapshot,
   overrides: ScenarioOverrides = {},
   treatment: CapexTreatment = 'sheet',
+  options: AnalyzeOptions = {},
 ): CompanyAnalysis {
   const derived = computeDerivedRows(snapshot.rows, treatment);
   const summary = computeSummaryStats(snapshot.rows, derived);
@@ -112,7 +134,7 @@ export function analyzeCompany(
   for (const kind of kinds) {
     scenarios[kind] = {} as Record<HorizonYears, ScenarioValuation>;
     for (const horizon of horizons) {
-      const inputs = buildScenarioInputs(derived, kind, horizon, overrides, seededExit5);
+      const inputs = buildScenarioInputs(derived, kind, horizon, overrides, seededExit5, options);
       scenarios[kind][horizon] = computeScenarioValuation(anchors, inputs);
     }
   }

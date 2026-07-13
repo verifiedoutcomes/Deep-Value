@@ -199,7 +199,10 @@ export const useAppStore = create<AppState>()(
         const state = s.tickers[ticker];
         const snapshot = activeSnapshot(state);
         if (!state || !snapshot) return { error: `no data loaded for ${ticker}` };
-        const analysis = analyzeCompany(snapshot, state.overrides, s.capexTreatment);
+        const analysis = analyzeCompany(snapshot, state.overrides, s.capexTreatment, {
+          correct3yTerminal: true,
+          seedBearBullFromBase: true,
+        });
         const base5 = analysis.scenarios.base[5];
         const savedAt = new Date().toISOString();
         const entry: SavedAnalysis = {

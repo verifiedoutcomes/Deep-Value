@@ -68,7 +68,7 @@ export default function SavedScreen() {
                 {d.priceDelta5 == null ? '–' : pctSigned(d.priceDelta5, 0)}
               </Mono>
               <Mono size="xs" color={colors.textFaint}>
-                {d.irr5 == null ? '' : `irr ${pct(d.irr5, 0)}`}
+                {d.irr5 == null ? '' : `IRR ${pct(d.irr5, 0)}`}
               </Mono>
             </View>
           </Pressable>

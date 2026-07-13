@@ -36,7 +36,6 @@ import {
   DEFAULT_MOS_THRESHOLDS,
   derive3yExitMultiple,
   seedBaseScenario,
-  seedEmptyScenario,
 } from '@dvh/engine';
 import { useTickerAnalysis } from '../../src/analysis';
 import { useAppStore } from '../../src/store';
@@ -86,9 +85,9 @@ export default function ValuationScreen() {
   const anchors = analysis.anchors;
   const seededExit5 = analysis.derived[analysis.derived.length - 1]?.evToEbit ?? 0;
 
-  const years =
-    overrides.years?.[kind]?.[horizon] ??
-    (kind === 'base' ? seedBaseScenario(analysis.derived, horizon) : seedEmptyScenario(horizon));
+  // App mode: every scenario (Bear/Bull included) seeds from the Base
+  // case, so users adjust from a live starting point.
+  const years = overrides.years?.[kind]?.[horizon] ?? seedBaseScenario(analysis.derived, horizon);
 
   // In review mode the frozen analysis is read-only: edits are ignored.
   const patch = (p: Partial<ScenarioOverrides>) => {
@@ -111,7 +110,7 @@ export default function ValuationScreen() {
     });
   };
 
-  const exit5 = overrides.exitMultiple5?.[kind] ?? (kind === 'base' ? seededExit5 : 0);
+  const exit5 = overrides.exitMultiple5?.[kind] ?? seededExit5;
   const exitCurrent =
     horizon === 5 ? exit5 : overrides.exitMultiple3?.[kind] ?? derive3yExitMultiple(kind, exit5);
   const fcfRate = overrides.discountRate5 ?? DEFAULT_DISCOUNT_RATE;
@@ -220,14 +219,7 @@ export default function ValuationScreen() {
           fcfRate={fcfRate}
           setYear={setYear}
         />
-        <View
-          style={{
-            paddingHorizontal: space.md,
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
+        <View style={{ paddingHorizontal: space.md, gap: 4 }}>
           <Mono size="xs" color={colors.textFaint}>
             boxed cells are yours to edit · tap ⓘ to follow any calculation
           </Mono>
@@ -297,6 +289,11 @@ export default function ValuationScreen() {
 
       <Card>
         <SectionTitle>Margin of safety · target buy</SectionTitle>
+        <Mono size="xs" color={colors.textFaint}>
+          target buy = base fair value {price(analysis.verdict.baseFairValue)} × (1 − MoS) — the
+          entry price that bakes in that discount to fair value
+        </Mono>
+        <View style={{ height: space.xs }} />
         {analysis.marginOfSafety.map((row, i) => (
           <View key={i} style={styles.mosRow}>
             <PctInput
@@ -395,7 +392,7 @@ function ResultCard({
           </Mono>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <Mono size="xs" color={colors.textFaint}>irr</Mono>
+          <Mono size="xs" color={colors.textFaint}>IRR</Mono>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Mono size="xl" bold color={err ? colors.red : colors.text}>
               {err ? '–' : pct(valuation.irr)}

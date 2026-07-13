@@ -1,4 +1,8 @@
-/** Seven-year weekly price chart with 52-week high/low markers. */
+/**
+ * Price chart: trailing TWO years of weekly closes with 52-week high/low
+ * markers. Labels are clamped inside the canvas and the y-domain includes
+ * the 52-week band, so nothing ever renders off-chart.
+ */
 import React from 'react';
 import { View } from 'react-native';
 import Svg, { Line, Path, Text as SvgText } from 'react-native-svg';
@@ -6,6 +10,8 @@ import type { PricePoint } from '@dvh/engine';
 import { fiftyTwoWeekRange } from '@dvh/engine';
 import { colors, type } from '../theme';
 import { Mono } from './ui';
+
+const LOOKBACK_WEEKS = 104; // 2 years
 
 export function PriceChart({
   history,
@@ -16,21 +22,30 @@ export function PriceChart({
   width: number;
   height?: number;
 }) {
-  if (history.length < 2) {
+  const window = history.slice(Math.max(0, history.length - LOOKBACK_WEEKS));
+  if (window.length < 2) {
     return <Mono color={colors.textDim}>price history unavailable</Mono>;
   }
-  const closes = history.map((p) => p.close);
-  const min = Math.min(...closes);
-  const max = Math.max(...closes);
-  const range = max - min || 1;
-  const x = (i: number) => (i / (history.length - 1)) * width;
-  const y = (v: number) => height - ((v - min) / range) * (height - 18) - 9;
+  // 52-week range from the full history (helper looks back from the last date)
+  const { high, low } = fiftyTwoWeekRange(history);
 
-  const d = history
+  const closes = window.map((p) => p.close);
+  // domain includes the 52w band so its lines always fit on-canvas
+  const min = Math.min(...closes, ...(low != null ? [low] : []));
+  const max = Math.max(...closes, ...(high != null ? [high] : []));
+  const range = max - min || 1;
+  const PAD_TOP = 16;
+  const PAD_BOTTOM = 16;
+  const x = (i: number) => (i / (window.length - 1)) * width;
+  const y = (v: number) =>
+    height - PAD_BOTTOM - ((v - min) / range) * (height - PAD_TOP - PAD_BOTTOM);
+  /** Keep a text baseline inside the canvas. */
+  const clampY = (v: number) => Math.min(Math.max(v, 11), height - 3);
+
+  const d = window
     .map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.close).toFixed(1)}`)
     .join(' ');
 
-  const { high, low } = fiftyTwoWeekRange(history);
   const last = closes[closes.length - 1]!;
   const first = closes[0]!;
   const up = last >= first;
@@ -49,7 +64,12 @@ export function PriceChart({
               strokeDasharray="3 4"
               strokeWidth={0.5}
             />
-            <SvgText x={4} y={y(high) - 3} fill={colors.textFaint} fontSize={type.size.xs}>
+            <SvgText
+              x={4}
+              y={clampY(y(high) - 4)}
+              fill={colors.textFaint}
+              fontSize={type.size.xs}
+            >
               {`52wH ${high.toFixed(0)}`}
             </SvgText>
           </>
@@ -65,7 +85,12 @@ export function PriceChart({
               strokeDasharray="3 4"
               strokeWidth={0.5}
             />
-            <SvgText x={4} y={y(low) + 10} fill={colors.textFaint} fontSize={type.size.xs}>
+            <SvgText
+              x={4}
+              y={clampY(y(low) + 11)}
+              fill={colors.textFaint}
+              fontSize={type.size.xs}
+            >
               {`52wL ${low.toFixed(0)}`}
             </SvgText>
           </>

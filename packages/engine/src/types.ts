@@ -134,6 +134,12 @@ export interface ScenarioInputs {
   fcfDiscountRate: number;
   /** Rate used to discount the terminal market cap (N66 for 5y, N91 for 3y). */
   terminalDiscountRate: number;
+  /**
+   * Periods the terminal market cap is discounted. The SHEET always uses 5
+   * (its 3-year block N92 has nper = 5 — a quirk); the corrected mode uses
+   * the horizon length. Callers choose via analyzeCompany options.
+   */
+  terminalNper: number;
   /** "Adjustment" entered in millions (N64), added to terminal market cap. */
   adjustmentMillions: number;
 }

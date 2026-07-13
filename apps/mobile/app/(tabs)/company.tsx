@@ -76,8 +76,8 @@ const GROUPS: { key: string; label: string; cols: string[] | null }[] = [
 ];
 
 const ROW_H = 22;
-const COL_W = 96;
-const HEAD_H = 44;
+const COL_W = 104;
+const HEAD_H = 50;
 
 export default function CompanyScreen() {
   const { width } = useWindowDimensions();
@@ -176,7 +176,7 @@ export default function CompanyScreen() {
       </Card>
 
       <Card>
-        <SectionTitle>Price · 7y weekly</SectionTitle>
+        <SectionTitle>Price · 2y weekly</SectionTitle>
         <PriceChart history={snapshot.priceHistory} width={width - 2 * space.md - 2 * space.md} />
       </Card>
 
@@ -355,7 +355,7 @@ function HistoryTable({
             exactly so every row lines up across the whole table */}
         <View style={styles.yearCol}>
           <View style={[styles.colHead, { alignItems: 'flex-start' }]}>
-            <Mono size="xs" color={colors.textFaint}>FY</Mono>
+            <Mono size="sm" color={colors.textDim} bold>FY</Mono>
           </View>
           {snapshotRows.map((r, i) => (
             <View key={i} style={styles.cellRow}>
@@ -385,7 +385,7 @@ function HistoryTable({
                   accessibilityRole="button"
                   accessibilityLabel={`chart ${col.title}`}
                 >
-                  <Mono size="xs" color={chartKey === col.key ? colors.accent : colors.textDim}>
+                  <Mono size="sm" color={chartKey === col.key ? colors.accent : colors.text} bold>
                     {col.title}
                   </Mono>
                   <Sparkline values={sparklineWindow(values)} width={COL_W - 12} height={18} />

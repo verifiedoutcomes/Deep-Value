@@ -12,6 +12,13 @@ import {
 } from '@dvh/engine';
 import type { CapexTreatment, HorizonYears, ScenarioKind } from '@dvh/engine';
 import { activeSnapshot, useAppStore, type SavedAnalysis, type TickerState } from './store';
+import type { AnalyzeOptions } from '@dvh/engine';
+
+/** The app's engine mode, used EVERYWHERE an analysis is computed. */
+export const APP_ANALYZE_OPTIONS: AnalyzeOptions = {
+  correct3yTerminal: true,
+  seedBearBullFromBase: true,
+};
 
 export interface TickerAnalysis {
   ticker: string;
@@ -42,8 +49,11 @@ export function useTickerAnalysis(tickerOverride?: string): TickerAnalysis {
   const horizon = reviewing ? reviewing.horizon : state?.horizon ?? 5;
   const scenarioTab = reviewing ? reviewing.scenarioTab : state?.scenarioTab ?? 'base';
 
+  // App mode: true 3-year discounting (not the sheet's nper=5 quirk) and
+  // Bear/Bull seeded from Base so users adjust from a live starting point.
   const analysis = useMemo(
-    () => (snapshot ? analyzeCompany(snapshot, overrides, capexTreatment) : null),
+    () =>
+      snapshot ? analyzeCompany(snapshot, overrides, capexTreatment, APP_ANALYZE_OPTIONS) : null,
     [snapshot, overrides, capexTreatment],
   );
   return {

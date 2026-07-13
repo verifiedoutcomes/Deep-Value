@@ -10,6 +10,7 @@ import { Alert, FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } f
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import { analyzeCompany } from '@dvh/engine';
 import { activeSnapshot, MAX_GROUP_SIZE, useAppStore } from '../../src/store';
+import { APP_ANALYZE_OPTIONS } from '../../src/analysis';
 import { useTickerSearch } from '../../src/data';
 import { colors, space, type } from '../../src/theme';
 import { Chip, Mono } from '../../src/components/ui';
@@ -28,7 +29,10 @@ function WatchRow({ ticker }: { ticker: string }) {
   const groups = useAppStore((s) => s.watchlistGroups);
   const snapshot = activeSnapshot(state);
   const analysis = useMemo(
-    () => (snapshot ? analyzeCompany(snapshot, state?.overrides ?? {}, capexTreatment) : null),
+    () =>
+      snapshot
+        ? analyzeCompany(snapshot, state?.overrides ?? {}, capexTreatment, APP_ANALYZE_OPTIONS)
+        : null,
     [snapshot, state?.overrides, capexTreatment],
   );
 

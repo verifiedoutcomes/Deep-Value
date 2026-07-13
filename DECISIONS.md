@@ -345,7 +345,25 @@ disagreed, **the file won**; those cases are called out explicitly.
     monorepo metro.config.js (watchFolders/nodeModulesPaths per Expo's
     own monorepo guidance).
 
-45. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+45. **App mode diverges from the sheet where the owner chose to
+    (2026-07-13).** Two engine options, BOTH defaulting to sheet parity
+    (the META gate is unchanged), with the app opting in everywhere via
+    APP_ANALYZE_OPTIONS:
+    - `correct3yTerminal`: the 3-year block discounts its terminal cap
+      THREE periods (the sheet's N92 uses five); the quirk note was
+      removed from the fair-value formula card accordingly.
+    - `seedBearBullFromBase`: unedited Bear/Bull seed from the Base case
+      (growth, margins, exit multiple), so all three scenarios are live
+      immediately and the user adjusts from Base rather than from zeros.
+    Also: price chart now shows a trailing 2 years with the y-domain
+    including the 52-week band and labels clamped on-canvas; historical
+    table headers enlarged; margin-of-safety card explains
+    target = base fair value × (1 − MoS) — the numbers are anchored to
+    fair value, not the current price, which is why they can sit far
+    above a cheap stock; IRR capitalised throughout; save/saved bar made
+    prominent and centred.
+
+46. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.

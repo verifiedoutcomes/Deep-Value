@@ -89,7 +89,7 @@ export function AnalysisBar({ reviewing }: { reviewing: SavedAnalysis | null }) 
   return (
     <View style={styles.bar}>
       <Pressable onPress={onSave} hitSlop={8} style={styles.saveBtn}>
-        <Mono size="xs" color={colors.accent} bold>⌸ save analysis</Mono>
+        <Mono size="sm" color={colors.accent} bold>⌸ save analysis</Mono>
       </Pressable>
       <Pressable
         onPress={() => {
@@ -97,9 +97,11 @@ export function AnalysisBar({ reviewing }: { reviewing: SavedAnalysis | null }) 
           router.navigate('/saved');
         }}
         hitSlop={8}
-        style={styles.action}
+        style={styles.savedBtn}
       >
-        <Mono size="xs" color={colors.textDim}>saved ({savedCount})</Mono>
+        <Mono size="sm" color={savedCount > 0 ? colors.blue : colors.textDim} bold>
+          saved ({savedCount})
+        </Mono>
       </Pressable>
     </View>
   );
@@ -109,7 +111,8 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: space.sm,
     marginHorizontal: space.md,
     marginTop: space.sm,
   },
@@ -122,12 +125,22 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   saveBtn: {
+    flex: 1,
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.accentDim,
+    borderColor: colors.accent,
     backgroundColor: colors.accentDim,
-    borderRadius: 4,
-    paddingHorizontal: space.sm,
-    paddingVertical: 5,
+    borderRadius: 6,
+    paddingVertical: 9,
+  },
+  savedBtn: {
+    flex: 1,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.chipBg,
+    borderRadius: 6,
+    paddingVertical: 9,
   },
   action: { paddingHorizontal: 4, paddingVertical: 5 },
 });

@@ -38,17 +38,14 @@ export function fairValueFormula(
     steps: [
       `intrinsic value = Σ PV(FCF) + PV(terminal cap)`,
       `  Σ PV(FCF) = ${m(pvSum)}`,
-      `  terminal cap = ${m(v.terminalMarketCap)} discounted 5 periods = ${m(
+      `  terminal cap = ${m(v.terminalMarketCap)} discounted ${horizon} periods = ${m(
         (v.intrinsicValue ?? 0) - pvSum,
       )}`,
       `  intrinsic = ${m(v.intrinsicValue)}`,
       `fair value = (${m(v.intrinsicValue)} ÷ ${m(a.snapshotMarketCap)}) × ${price(a.price)}`,
       `           = ${price(v.fairValuePerShare)}`,
     ],
-    note:
-      horizon === 3
-        ? 'Sheet quirk kept for parity: the 3-year block still discounts its terminal cap five periods (N92 uses nper = 5).'
-        : 'Terminal cap = final-year operating income × exit multiple − net debt + adjustment.',
+    note: 'Terminal cap = final-year operating income × exit multiple − net debt + adjustment.',
   };
 }
 
