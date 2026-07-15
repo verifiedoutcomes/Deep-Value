@@ -183,10 +183,13 @@ export class FmpProvider implements DataProvider {
   }
 
   async ttmFundamentals(symbol: SymbolRef): Promise<TtmFundamentals> {
-    // TTM statements: sum of the last four quarters.
+    // TTM statements: sum of the last four quarters. Eight quarters are
+    // requested so the PRIOR trailing window is available too (true
+    // TTM Y/Y); free-tier keys fall back to five and the engine then
+    // uses the sheet's proxy formula instead.
     const params = { symbol: symbol.ticker, period: 'quarter', limit: '4' };
     const [income, cashflow, balance, metricsTtm] = await Promise.all([
-      this.get<Json[]>('/stable/income-statement', params),
+      this.getWithLimitFallback<Json[]>('/stable/income-statement', { ...params, limit: '8' }),
       this.get<Json[]>('/stable/cash-flow-statement', params),
       this.get<Json[]>('/stable/balance-sheet-statement', { ...params, limit: '1' }),
       this.get<Json[]>('/stable/key-metrics-ttm', { symbol: symbol.ticker }),
@@ -194,19 +197,23 @@ export class FmpProvider implements DataProvider {
     const sum = (rows: Json[], key: string): Maybe => {
       if (rows.length < 4) return null;
       let acc = 0;
-      for (const r of rows) {
+      for (const r of rows.slice(0, 4)) {
         const v = num(r[key]);
         if (v == null) return null;
         acc += v;
       }
       return acc;
     };
+    // quarters 5..8 back = the prior trailing-twelve-month window
+    const priorWindow = income.slice(4, 8);
+    const priorTtmRevenue = priorWindow.length === 4 ? sum(priorWindow, 'revenue') : null;
     const b = balance[0] ?? {};
     const m = metricsTtm[0] ?? {};
     const equity = num((b as Json).totalStockholdersEquity);
     const cashEq = num((b as Json).cashAndCashEquivalents);
     return {
       asOf: String((income[0] as Json | undefined)?.date ?? new Date().toISOString().slice(0, 10)),
+      priorTtmRevenue,
       revenue: sum(income, 'revenue'),
       operatingIncome: sum(income, 'operatingIncome'),
       grossProfit: sum(income, 'grossProfit'),

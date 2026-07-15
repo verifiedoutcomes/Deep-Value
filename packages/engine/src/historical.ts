@@ -66,11 +66,16 @@ export function computeDerivedRows(
       aa = x < 0 && f < 0 ? v : v - Math.max(f, x);
     }
 
+    // True TTM Y/Y when the prior trailing window is known; otherwise the
+    // sheet's proxy (divide by the FY two rows back, E53 = D53/D51 - 1).
+    const yoYBase =
+      isTTM && row.priorTtmRevenue != null && row.priorTtmRevenue !== 0
+        ? row.priorTtmRevenue
+        : prev?.revenue;
+
     return {
       revenueYoY:
-        prev == null || d == null || prev.revenue == null || prev.revenue === 0
-          ? null
-          : d / prev.revenue - 1,
+        yoYBase == null || d == null || yoYBase === 0 ? null : d / yoYBase - 1,
       operatingMargin: safeDiv(f, d),
       adjFcf: k,
       adjFcfMargin: safeDiv(k, d),

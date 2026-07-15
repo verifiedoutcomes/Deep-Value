@@ -54,6 +54,12 @@ export interface AnnualFundamentals {
 
 export interface TtmFundamentals extends Omit<AnnualFundamentals, 'fiscalYear'> {
   asOf: string; // ISO date
+  /**
+   * Revenue of the PRIOR trailing-twelve-month window (quarters 5..8
+   * back), enabling a true non-overlapping TTM Y/Y. Null when the
+   * provider/plan cannot supply eight quarters.
+   */
+  priorTtmRevenue?: Maybe;
 }
 
 export interface DataProvider {

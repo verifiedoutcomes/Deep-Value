@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import fixtureJson from '../fixtures/meta-2026-07-10.json';
-import { analyzeCompany, type CompanySnapshot } from '../src/index';
+import { analyzeCompany, computeDerivedRows, type CompanySnapshot } from '../src/index';
 
 const fixture = fixtureJson as unknown as CompanySnapshot;
 
@@ -33,6 +33,31 @@ describe('corrected 3-year terminal discounting (app mode)', () => {
       parity.scenarios.base[5].intrinsicValue!,
       2,
     );
+  });
+});
+
+describe('true TTM Y/Y via priorTtmRevenue', () => {
+  it('uses the prior trailing window when present, sheet proxy when absent', () => {
+    const rows = structuredClone(fixture.rows);
+    const n = rows.length;
+
+    // absent -> sheet formula E53 = D53 / D51 - 1
+    const sheetDerived = computeDerivedRows(rows);
+    expect(sheetDerived[n - 1]!.revenueYoY!).toBeCloseTo(
+      rows[n - 1]!.revenue! / rows[n - 3]!.revenue! - 1,
+      12,
+    );
+
+    // present -> TTM / prior TTM - 1 (true non-overlapping Y/Y)
+    rows[n - 1]!.priorTtmRevenue = 180_000_000_000;
+    const trueDerived = computeDerivedRows(rows);
+    expect(trueDerived[n - 1]!.revenueYoY!).toBeCloseTo(
+      rows[n - 1]!.revenue! / 180_000_000_000 - 1,
+      12,
+    );
+
+    // FY rows are untouched either way
+    expect(trueDerived[n - 2]!.revenueYoY!).toBeCloseTo(sheetDerived[n - 2]!.revenueYoY!, 12);
   });
 });
 

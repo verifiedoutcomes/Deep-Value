@@ -41,6 +41,13 @@ export interface HistoricalRowInput {
    * Omitted/undefined for the TTM row, where Q53 = P53 + M53 is derived.
    */
   enterpriseValue?: Maybe; // Q
+  /**
+   * TTM row only: revenue of the PRIOR trailing-twelve-month window
+   * (quarters 5..8 back). When present, TTM Y/Y = revenue/priorTtm − 1 —
+   * a true non-overlapping year-over-year. When absent, the sheet's
+   * E53 = D53/D51 − 1 (TTM over the second-latest FY) applies.
+   */
+  priorTtmRevenue?: Maybe;
   tangibleBook: Maybe; // T
   grossProfit: Maybe; // V
   netIncome: Maybe; // X

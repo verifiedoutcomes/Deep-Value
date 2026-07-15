@@ -95,6 +95,8 @@ export async function loadCompanySnapshot(
   ttmRow.shares = quote.shares;
   ttmRow.marketCap = quote.marketCap;
   delete ttmRow.enterpriseValue; // Q53 = P53 + M53, derived by the engine
+  // enables a true non-overlapping TTM Y/Y when 8 quarters were available
+  ttmRow.priorTtmRevenue = ttm.priorTtmRevenue == null ? null : ttm.priorTtmRevenue * ttmFx;
   rows.push(ttmRow);
 
   // E15: DVH's ROIC is the latest ANNUAL key-metrics value (verified: the
