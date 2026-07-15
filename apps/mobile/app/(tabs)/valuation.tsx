@@ -83,11 +83,12 @@ export default function ValuationScreen() {
 
   const valuation = analysis.scenarios[kind][horizon];
   const anchors = analysis.anchors;
-  const seededExit5 = analysis.derived[analysis.derived.length - 1]?.evToEbit ?? 0;
+  const seededExit5 = analysis.seededExitMultiple5;
 
   // App mode: every scenario (Bear/Bull included) seeds from the Base
   // case, so users adjust from a live starting point.
-  const years = overrides.years?.[kind]?.[horizon] ?? seedBaseScenario(analysis.derived, horizon);
+  const years =
+    overrides.years?.[kind]?.[horizon] ?? seedBaseScenario(analysis.derived, horizon, true);
 
   // In review mode the frozen analysis is read-only: edits are ignored.
   const patch = (p: Partial<ScenarioOverrides>) => {
@@ -112,7 +113,9 @@ export default function ValuationScreen() {
 
   const exit5 = overrides.exitMultiple5?.[kind] ?? seededExit5;
   const exitCurrent =
-    horizon === 5 ? exit5 : overrides.exitMultiple3?.[kind] ?? derive3yExitMultiple(kind, exit5);
+    horizon === 5
+      ? exit5
+      : overrides.exitMultiple3?.[kind] ?? derive3yExitMultiple(kind, exit5, true);
   const fcfRate = overrides.discountRate5 ?? DEFAULT_DISCOUNT_RATE;
 
   const hasEdits =
@@ -400,7 +403,7 @@ function ResultCard({
             {!err && <InfoTag spec={() => irrFormula(valuation, anchors, horizon)} />}
           </View>
           <Mono size="xs" color={colors.textDim}>
-            {`${horizon}-yr px Δ ${pctSigned(valuation.horizonPriceChange, 0)}`}
+            {`${horizon}-yr MOIC ${valuation.horizonMoic.toFixed(2)}×`}
           </Mono>
         </View>
       </View>

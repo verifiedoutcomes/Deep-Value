@@ -12,13 +12,9 @@ import {
 } from '@dvh/engine';
 import type { CapexTreatment, HorizonYears, ScenarioKind } from '@dvh/engine';
 import { activeSnapshot, useAppStore, type SavedAnalysis, type TickerState } from './store';
-import type { AnalyzeOptions } from '@dvh/engine';
+import { APP_ANALYZE_OPTIONS } from './engineOptions';
 
-/** The app's engine mode, used EVERYWHERE an analysis is computed. */
-export const APP_ANALYZE_OPTIONS: AnalyzeOptions = {
-  correct3yTerminal: true,
-  seedBearBullFromBase: true,
-};
+export { APP_ANALYZE_OPTIONS };
 
 export interface TickerAnalysis {
   ticker: string;

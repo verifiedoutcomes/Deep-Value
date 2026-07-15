@@ -104,24 +104,38 @@ export function computeDerivedRows(
 export function computeSummaryStats(
   rows: HistoricalRowInput[],
   derived: DerivedRow[],
+  /**
+   * corrected = true (app mode) fixes two sheet quirks:
+   *  - CAGRs anchor to the LATEST fiscal year (the sheet's D54 = D51/D43
+   *    quietly excludes the newest year);
+   *  - averaging/trimmed-mean windows use fiscal years only (the sheet's
+   *    windows include the TTM row, double-counting the latest year).
+   */
+  options: { corrected?: boolean } = {},
 ): SummaryStats {
   const n = rows.length;
+  const corrected = options.corrected === true;
+  // index of the CAGR end row: latest FY when corrected, sheet's row 51
+  // (second-latest FY) otherwise
+  const endI = corrected ? n - 2 : n - 3;
+  // exclusive end of averaging windows: drop the TTM duplicate when corrected
+  const winEnd = corrected ? n - 1 : n;
   const at = <T>(arr: T[], i: number): T | undefined =>
     i >= 0 && i < arr.length ? arr[i] : undefined;
 
   const cagr8 = (get: (r: HistoricalRowInput) => Maybe): Maybe => {
-    const end = at(rows, n - 3);
-    const start = at(rows, n - 11);
+    const end = at(rows, endI);
+    const start = at(rows, endI - 8);
     return end && start ? cagr(get(end), get(start), 8) : null;
   };
   const cagr10 = (get: (r: HistoricalRowInput) => Maybe): Maybe => {
-    const end = at(rows, n - 3);
-    const start = at(rows, n - 13);
+    const end = at(rows, endI);
+    const start = at(rows, endI - 10);
     return end && start ? cagr(get(end), get(start), 10) : null;
   };
   const last4 = (get: (d: DerivedRow) => Maybe): Maybe =>
-    average(derived.slice(Math.max(0, n - 4)).map(get));
-  const window13 = <T>(arr: T[]): T[] => arr.slice(Math.max(0, n - 13));
+    average(derived.slice(Math.max(0, winEnd - 4), winEnd).map(get));
+  const window13 = <T>(arr: T[]): T[] => arr.slice(Math.max(0, winEnd - 13), winEnd);
 
   return {
     revenueCagr8: cagr8((r) => r.revenue),
@@ -132,8 +146,8 @@ export function computeSummaryStats(
     capexCagr8: cagr8((r) => r.capex),
     sbcCagr8: cagr8((r) => r.sbc),
     adjFcfCagr8: (() => {
-      const end = at(derived, n - 3);
-      const start = at(derived, n - 11);
+      const end = at(derived, endI);
+      const start = at(derived, endI - 8);
       return end && start ? cagr(end.adjFcf, start.adjFcf, 8) : null;
     })(),
     adjFcfMarginAvg4: last4((d) => d.adjFcfMargin),
@@ -142,8 +156,8 @@ export function computeSummaryStats(
     sharesCagr10: cagr10((r) => r.shares),
     marketCapCagr10: cagr10((r) => r.marketCap),
     evCagr10: (() => {
-      const end = at(derived, n - 3);
-      const start = at(derived, n - 13);
+      const end = at(derived, endI);
+      const start = at(derived, endI - 10);
       return end && start ? cagr(end.enterpriseValue, start.enterpriseValue, 10) : null;
     })(),
     adjFcfYieldTrimmean: trimmeanExcel(

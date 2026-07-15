@@ -90,3 +90,62 @@ describe('bear/bull seeded from base (app mode)', () => {
     expect(parity.scenarios.bull[5].status).toBe('no-forecast');
   });
 });
+
+describe('soundest-logic flags (app mode)', () => {
+  const parity = analyzeCompany(fixture);
+
+  it('correctedSummaryStats anchors CAGRs to the LATEST fiscal year', () => {
+    const c = analyzeCompany(fixture, {}, 'sheet', { correctedSummaryStats: true });
+    const n = fixture.rows.length;
+    const latest = fixture.rows[n - 2]!; // FY2025
+    const eightBack = fixture.rows[n - 10]!; // FY2017
+    expect(c.summary.revenueCagr8!).toBeCloseTo(
+      Math.pow(latest.revenue! / eightBack.revenue!, 1 / 8) - 1,
+      12,
+    );
+    // sheet default (2024/2016) still matches the fixture cell D54
+    expect(parity.summary.revenueCagr8!).toBeCloseTo(0.2497776137, 9);
+  });
+
+  it('correctedSummaryStats drops the TTM double-count from windows', () => {
+    const c = analyzeCompany(fixture, {}, 'sheet', { correctedSummaryStats: true });
+    // fixture TTM duplicates FY2025, so the corrected trimmed mean must
+    // differ from the sheet's (S54 = 22.3948878)
+    expect(c.summary.evEbitTrimmean!).not.toBeCloseTo(22.3948878, 6);
+    expect(parity.summary.evEbitTrimmean!).toBeCloseTo(22.3948878, 8);
+  });
+
+  it('seedExitFromTrimmedMean seeds the trimmed-mean multiple', () => {
+    const c = analyzeCompany(fixture, {}, 'sheet', { seedExitFromTrimmedMean: true });
+    expect(c.seededExitMultiple5).toBeCloseTo(c.summary.evEbitTrimmean!, 9);
+    expect(c.scenarios.base[5].exitMultiple).toBeCloseTo(c.summary.evEbitTrimmean!, 9);
+    // sheet default seeds the current multiple (S53)
+    expect(parity.seededExitMultiple5).toBeCloseTo(20.5594756, 6);
+  });
+
+  it('symmetric3yOffsets: every 3y multiple = 5y − 2', () => {
+    const c = analyzeCompany(fixture, {}, 'sheet', {
+      seedBearBullFromBase: true,
+      symmetric3yOffsets: true,
+    });
+    for (const kind of ['bear', 'base', 'bull'] as const) {
+      expect(c.scenarios[kind][3].exitMultiple).toBeCloseTo(
+        c.scenarios[kind][5].exitMultiple - 2,
+        9,
+      );
+    }
+  });
+
+  it('horizonMoic = (Σ FCF + terminal cap) / snapshot cap, both modes', () => {
+    const v = parity.scenarios.base[5];
+    const expected =
+      (v.forecast.reduce((a, f) => a + f.adjFcf, 0) + v.terminalMarketCap) / 1664086890000;
+    expect(v.horizonMoic).toBeCloseTo(expected, 9);
+    expect(v.horizonMoic).toBeGreaterThan(1);
+  });
+
+  it('horizonPriceChange is (1+IRR)^h − 1 (proved redundant, kept for parity)', () => {
+    const v = parity.scenarios.base[5];
+    expect(v.horizonPriceChange!).toBeCloseTo(Math.pow(1 + v.irr!, 5) - 1, 6);
+  });
+});

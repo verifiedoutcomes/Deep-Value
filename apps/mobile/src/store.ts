@@ -16,6 +16,7 @@ import type {
 } from '@dvh/engine';
 import type { CapexTreatment, HorizonYears, ScenarioKind } from '@dvh/engine';
 import { CHECKLIST_QUESTIONS, analyzeCompany } from '@dvh/engine';
+import { APP_ANALYZE_OPTIONS } from './engineOptions';
 import metaFixture from '@dvh/engine/fixtures/meta-2026-07-10.json';
 
 export const BUNDLED_META = metaFixture as unknown as CompanySnapshot;
@@ -217,10 +218,7 @@ export const useAppStore = create<AppState>()(
         const state = s.tickers[ticker];
         const snapshot = activeSnapshot(state);
         if (!state || !snapshot) return { error: `no data loaded for ${ticker}` };
-        const analysis = analyzeCompany(snapshot, state.overrides, s.capexTreatment, {
-          correct3yTerminal: true,
-          seedBearBullFromBase: true,
-        });
+        const analysis = analyzeCompany(snapshot, state.overrides, s.capexTreatment, APP_ANALYZE_OPTIONS);
         const base5 = analysis.scenarios.base[5];
         const savedAt = new Date().toISOString();
         const entry: SavedAnalysis = {

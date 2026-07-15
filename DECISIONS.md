@@ -397,7 +397,27 @@ disagreed, **the file won**; those cases are called out explicitly.
     E52 (FY-latest over prior FY, non-overlapping), so fair values and
     IRRs were never contaminated.
 
-48. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+48. **Soundest-logic pass (2026-07-13, owner-requested).** Four more
+    app-mode flags (sheet-parity defaults untouched; META gate green):
+    - `correctedSummaryStats`: CAGRs anchor to the LATEST fiscal year
+      (sheet's D54 = D51/D43 quietly excluded the newest year) and the
+      averaging/trimmed-mean windows use fiscal years only (the sheet's
+      windows included the TTM row, double-counting the latest year).
+    - `seedExitFromTrimmedMean`: the seeded exit multiple is the
+      40%-trimmed-mean EV/EBIT (S54) — the mean-reversion-consistent
+      choice for a deep-value thesis — falling back to the current
+      multiple (S53) when unavailable.
+    - `seedMarginsFromTtm`: both seeded margins come from the TTM row
+      (sheet mixed TTM op margin with FY FCF margin).
+    - `symmetric3yOffsets`: every 3-year exit multiple = 5-year − 2
+      (sheet had bear −3, base/bull −2 for no stated reason).
+    Display: the "5-Yr Price Change" (Q66) was PROVEN algebraically
+    redundant — it reduces exactly to (1+IRR)^h − 1 — so the app shows
+    horizon MOIC ((Σ FCF + terminal cap) ÷ outlay, undiscounted) as the
+    IRR's companion metric instead; the parity field remains in the
+    engine, with the identity pinned by a test.
+
+49. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.

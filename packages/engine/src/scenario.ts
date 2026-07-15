@@ -67,13 +67,19 @@ export function anchorsFromRows(
 export function seedBaseScenario(
   derived: DerivedRow[],
   horizon: HorizonYears,
+  /**
+   * Sheet mixes references: op margin from TTM (G53) but FCF margin from
+   * the latest FY (L52). Pass true to take BOTH from the TTM row — the
+   * most current data, consistently (app mode).
+   */
+  marginsFromTtm = false,
 ): ScenarioYearInput[] {
   const n = derived.length;
   const latestFy = derived[n - 2];
   const ttm = derived[n - 1];
   const e = latestFy?.revenueYoY ?? 0;
   const g = ttm?.operatingMargin ?? 0;
-  const h = latestFy?.adjFcfMargin ?? 0;
+  const h = (marginsFromTtm ? ttm?.adjFcfMargin ?? latestFy?.adjFcfMargin : latestFy?.adjFcfMargin) ?? 0;
   const yoy =
     horizon === 5
       ? [e, e, e, e - 0.01, e - 0.02]
@@ -106,8 +112,14 @@ export function seedEmptyScenario(horizon: HorizonYears): ScenarioYearInput[] {
  * have them: base N86 = N61 - 2, bear N94 = N69 - 3, bull N102 = N77 - 2.
  * (The bear offset of 3 is the sheet's own inconsistency; kept as-is.)
  */
-export function derive3yExitMultiple(kind: ScenarioKind, fiveYearMultiple: number): number {
-  const offset = kind === 'bear' ? 3 : 2;
+export function derive3yExitMultiple(
+  kind: ScenarioKind,
+  fiveYearMultiple: number,
+  /** true: a uniform −2 for every scenario (app mode) instead of the
+   *  sheet's asymmetric bear −3 / base −2 / bull −2. */
+  symmetric = false,
+): number {
+  const offset = symmetric ? 2 : kind === 'bear' ? 3 : 2;
   return fiveYearMultiple - offset;
 }
 
@@ -205,6 +217,12 @@ export function computeScenarioValuation(
       1;
   }
 
+  // Undiscounted multiple on invested capital: total cash returned over
+  // the horizon vs the outlay. Independent of the IRR (ignores timing).
+  const horizonMoic =
+    (forecast.reduce((a, f) => a + f.adjFcf, 0) + terminalMarketCap) /
+    anchors.snapshotMarketCap;
+
   return {
     status,
     forecast,
@@ -217,6 +235,7 @@ export function computeScenarioValuation(
     fairValuePerShare,
     priceDelta,
     horizonPriceChange,
+    horizonMoic,
   };
 }
 

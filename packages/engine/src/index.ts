@@ -56,6 +56,29 @@ export interface AnalyzeOptions {
    * false (default): sheet behaviour — zeros, rendering "No Forecast".
    */
   seedBearBullFromBase?: boolean;
+  /**
+   * true: summary CAGRs anchor to the LATEST fiscal year and the
+   * averaging/trimmed-mean windows use fiscal years only (no TTM
+   * double-count); false (default): the sheet's anchors and windows.
+   */
+  correctedSummaryStats?: boolean;
+  /**
+   * true: the seeded exit multiple is the 40%-trimmed-mean EV/EBIT
+   * (S54) — the mean-reversion-consistent choice — falling back to the
+   * current multiple when unavailable; false (default): current EV/EBIT
+   * (S53), as the sheet seeds it.
+   */
+  seedExitFromTrimmedMean?: boolean;
+  /**
+   * true: BOTH seeded margins come from the TTM row; false (default):
+   * the sheet's mixed references (op margin TTM, FCF margin latest FY).
+   */
+  seedMarginsFromTtm?: boolean;
+  /**
+   * true: every 3-year exit multiple = 5-year − 2; false (default): the
+   * sheet's asymmetric bear −3 / base −2 / bull −2.
+   */
+  symmetric3yOffsets?: boolean;
 }
 
 /** Per-ticker user-editable state persisted by the app. */
@@ -74,6 +97,8 @@ export interface CompanyAnalysis {
   summary: SummaryStats;
   header: HeaderMetrics;
   anchors: ValuationAnchors;
+  /** The default 5-year exit multiple used for unedited scenarios. */
+  seededExitMultiple5: number;
   scenarios: Record<ScenarioKind, Record<HorizonYears, ScenarioValuation>>;
   irrStrip: IrrStripCell[];
   marginOfSafety: MarginOfSafetyRow[];
@@ -94,10 +119,15 @@ export function buildScenarioInputs(
   const rate3 = overrides.discountRate3 ?? DEFAULT_DISCOUNT_RATE;
   const exit5 = overrides.exitMultiple5?.[kind] ?? (seedFromBase ? seededExitMultiple5 : 0);
   const exitMultiple =
-    horizon === 5 ? exit5 : overrides.exitMultiple3?.[kind] ?? derive3yExitMultiple(kind, exit5);
+    horizon === 5
+      ? exit5
+      : overrides.exitMultiple3?.[kind] ??
+        derive3yExitMultiple(kind, exit5, options.symmetric3yOffsets === true);
   const years =
     overrides.years?.[kind]?.[horizon] ??
-    (seedFromBase ? seedBaseScenario(derived, horizon) : seedEmptyScenario(horizon));
+    (seedFromBase
+      ? seedBaseScenario(derived, horizon, options.seedMarginsFromTtm === true)
+      : seedEmptyScenario(horizon));
   return {
     years,
     exitMultiple,
@@ -119,14 +149,23 @@ export function analyzeCompany(
   options: AnalyzeOptions = {},
 ): CompanyAnalysis {
   const derived = computeDerivedRows(snapshot.rows, treatment);
-  const summary = computeSummaryStats(snapshot.rows, derived);
+  const summary = computeSummaryStats(snapshot.rows, derived, {
+    corrected: options.correctedSummaryStats === true,
+  });
   const header = computeHeaderMetrics(snapshot, treatment);
   const anchors = anchorsFromRows(
     snapshot.rows,
     snapshot.snapshotMarketCap,
     snapshot.quote.price,
   );
-  const seededExit5 = derived[derived.length - 1]?.evToEbit ?? 0; // N61 = S53
+  // N61 = S53 (current EV/EBIT); app mode prefers the trimmed-mean
+  // multiple (S54) — the mean-reversion-consistent seed for a deep-value
+  // thesis — falling back to the current multiple when unavailable.
+  const currentEvEbit = derived[derived.length - 1]?.evToEbit ?? 0;
+  const seededExit5 =
+    options.seedExitFromTrimmedMean === true
+      ? summary.evEbitTrimmean ?? currentEvEbit
+      : currentEvEbit;
 
   const kinds: ScenarioKind[] = ['bear', 'base', 'bull'];
   const horizons: HorizonYears[] = [5, 3];
@@ -145,6 +184,7 @@ export function analyzeCompany(
     summary,
     header,
     anchors,
+    seededExitMultiple5: seededExit5,
     scenarios,
     irrStrip: computeIrrStrip(anchors, base5),
     marginOfSafety: computeMarginOfSafety(

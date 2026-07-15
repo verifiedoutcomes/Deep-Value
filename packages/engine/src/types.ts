@@ -181,8 +181,17 @@ export interface ScenarioValuation {
   irr: Maybe; // Q61; null unless status === 'ok'
   fairValuePerShare: Maybe; // Q63 = (N67 / P53) * price
   priceDelta: Maybe; // T6 = fair value / price - 1
-  /** Q66 / Q91: horizon price change implied by the IRR. */
+  /** Q66 / Q91: horizon price change implied by the IRR. NOTE: this is
+   *  algebraically identical to (1+IRR)^horizon − 1 — it carries no
+   *  information beyond the IRR and is kept for sheet parity. */
   horizonPriceChange: Maybe;
+  /**
+   * Multiple on invested capital over the horizon: (Σ FCF + terminal
+   * market cap) ÷ snapshot market cap, undiscounted. Unlike the price
+   * change above, this is independent of the IRR (it ignores timing),
+   * so it's the informative companion metric.
+   */
+  horizonMoic: number;
 }
 
 export interface IrrStripCell {
