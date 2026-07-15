@@ -381,7 +381,23 @@ disagreed, **the file won**; those cases are called out explicitly.
     passthrough is quota-free but endpoint-allowlisted and per-IP
     rate-limited.
 
-47. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+47. **TTM Revenue Y/Y corrected to a true trailing comparison
+    (2026-07-13, owner-requested audit).** The sheet's E53 = D53/D51 − 1
+    divides TTM revenue by the SECOND-latest FY (2024) — exact right
+    after fiscal year-end, drifting to overstate as quarters advance.
+    Dividing by the latest FY instead (D52) would be worse: the periods
+    overlap by up to three quarters, reading ~0% for a fast grower just
+    after year-end. The correct measure is TTM over the PRIOR TTM
+    (quarters 5..8 back): the data layer now requests eight quarters and
+    supplies `priorTtmRevenue`; the engine uses it when present and
+    falls back to the sheet's proxy when not (free-tier keys cap at five
+    quarters). The fixture carries no priorTtmRevenue, so the META gate
+    is byte-identical. IMPORTANT: this only affects the displayed TTM
+    row and the 4-row growth average — the valuation seed always used
+    E52 (FY-latest over prior FY, non-overlapping), so fair values and
+    IRRs were never contaminated.
+
+48. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.
