@@ -3,7 +3,8 @@
  * Tap to revisit the original results exactly; long-press to delete.
  */
 import React from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { showAlert } from '../src/alert';
 import { useRouter } from 'expo-router';
 import { useAppStore } from '../src/store';
 import { colors, deltaColor, space } from '../src/theme';
@@ -36,7 +37,7 @@ export default function SavedScreen() {
             }}
             onLongPress={() => {
               warningHaptic();
-              Alert.alert('Delete saved analysis?', `${item.ticker} · ${item.savedAt.slice(0, 16)}`, [
+              showAlert('Delete saved analysis?', `${item.ticker} · ${item.savedAt.slice(0, 16)}`, [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Delete', style: 'destructive', onPress: () => deleteAnalysis(item.id) },
               ]);

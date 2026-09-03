@@ -5,9 +5,7 @@
  * baseline set.
  */
 import React, { useState } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
+import { KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -15,6 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { showAlert } from '../../src/alert';
 import { useAppStore } from '../../src/store';
 import { colors, space, type } from '../../src/theme';
 import { Banner, Mono } from '../../src/components/ui';
@@ -70,7 +69,7 @@ export default function ChecklistScreen() {
             }}
             onLongPress={() => {
               warningHaptic();
-              Alert.alert('Remove question?', item.question, [
+              showAlert('Remove question?', item.question, [
                 { text: 'Cancel', style: 'cancel' },
                 {
                   text: 'Remove',
@@ -120,7 +119,7 @@ export default function ChecklistScreen() {
           </Mono>
           <Pressable
             onPress={() =>
-              Alert.alert(
+              showAlert(
                 'Restore baseline?',
                 'Replaces this list with the original 14 questions. Answers reset to No.',
                 [

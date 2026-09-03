@@ -4,9 +4,7 @@
  * add your own at the bottom, long-press to remove.
  */
 import React, { useState } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
+import { KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -15,6 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { showAlert } from '../src/alert';
 import { useAppStore } from '../src/store';
 import { colors, space, type } from '../src/theme';
 import { Mono } from '../src/components/ui';
@@ -51,7 +50,7 @@ export default function InspirationScreen() {
             key={`${i}-${q.text.slice(0, 16)}`}
             onLongPress={() => {
               warningHaptic();
-              Alert.alert('Remove quote?', `“${q.text.slice(0, 60)}…”`, [
+              showAlert('Remove quote?', `“${q.text.slice(0, 60)}…”`, [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Remove', style: 'destructive', onPress: () => removeQuote(i) },
               ]);

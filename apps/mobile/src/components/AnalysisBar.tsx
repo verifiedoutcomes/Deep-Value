@@ -8,7 +8,8 @@
  *    exit/delete actions; the tabs render the original results exactly.
  */
 import React from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { showAlert } from '../alert';
 import { useRouter } from 'expo-router';
 import { useAppStore, type SavedAnalysis } from '../store';
 import { colors, space } from '../theme';
@@ -37,7 +38,7 @@ export function AnalysisBar({ reviewing }: { reviewing: SavedAnalysis | null }) 
         <Pressable
           onPress={() => {
             warningHaptic();
-            Alert.alert('Delete this saved analysis?', `${reviewing.ticker} · ${when}`, [
+            showAlert('Delete this saved analysis?', `${reviewing.ticker} · ${when}`, [
               { text: 'Cancel', style: 'cancel' },
               {
                 text: 'Delete',
@@ -69,11 +70,11 @@ export function AnalysisBar({ reviewing }: { reviewing: SavedAnalysis | null }) 
     const result = saveAnalysis();
     if ('error' in result) {
       warningHaptic();
-      Alert.alert('Nothing to save', result.error);
+      showAlert('Nothing to save', result.error);
       return;
     }
     successHaptic();
-    Alert.alert(
+    showAlert(
       'Analysis saved',
       'Company + Valuation frozen as of now. Revisit it anytime from ⌸ Saved on the Watchlist.',
       [

@@ -1,0 +1,52 @@
+name: Deploy web demo to GitHub Pages
+
+# Builds the real Expo app for the web (react-native-web) and publishes
+# it, plus the interface mockup, to GitHub Pages:
+#   https://verifiedoutcomes.github.io/Deep-Value/          the live app
+#   https://verifiedoutcomes.github.io/Deep-Value/mockup/   design mockup
+#
+# One-time setup by a repo admin: Settings -> Pages -> Source: "GitHub
+# Actions". After that every push to main redeploys.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Export web bundle
+        working-directory: apps/mobile
+        run: npx expo export --platform web --output-dir dist
+      - name: SPA fallback for deep links (e.g. /company)
+        run: cp apps/mobile/dist/index.html apps/mobile/dist/404.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/mobile/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

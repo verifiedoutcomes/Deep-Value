@@ -8,20 +8,31 @@ import { average, cagr, safeDiv, safeSub, trimmeanExcel } from './math';
 /**
  * Adjusted FCF, K = H - I - J (I34:I53 store capex as a NEGATIVE number, so
  * this is OCF + |capex| - SBC). This is the sheet's convention and the
- * default; DO NOT silently "fix" the sign. The conventional treatment
- * (OCF - |capex| - SBC) is available behind an explicit setting.
+ * default; DO NOT silently "fix" the sign. Two alternatives sit behind an
+ * explicit setting:
+ *  - 'conventional': OCF - |capex| - SBC (all capex is a cost);
+ *  - 'owner':        OCF - D&A - SBC — Buffett's owner earnings with
+ *                    depreciation & amortization as the maintenance-capex
+ *                    proxy (only the spend needed to DEFEND current
+ *                    earnings power is a cost; growth capex is a choice).
+ *                    Null when the snapshot carries no D&A.
  */
-export type CapexTreatment = 'sheet' | 'conventional';
+export type CapexTreatment = 'sheet' | 'conventional' | 'owner';
 
 export function adjFcf(
   ocf: Maybe,
   capex: Maybe,
   sbc: Maybe,
   treatment: CapexTreatment = 'sheet',
+  depreciationAmortization: Maybe = null,
 ): Maybe {
   if (treatment === 'conventional') {
     if (ocf == null || capex == null || sbc == null) return null;
     return ocf - Math.abs(capex) - sbc;
+  }
+  if (treatment === 'owner') {
+    if (ocf == null || depreciationAmortization == null || sbc == null) return null;
+    return ocf - Math.abs(depreciationAmortization) - sbc;
   }
   return safeSub(ocf, capex, sbc);
 }
@@ -50,7 +61,13 @@ export function computeDerivedRows(
     const isTTM = row.yearLabel === 'TTM' && i === n - 1;
     const prev = isTTM ? rows[n - 3] : rows[i - 1];
     const ev = rowEnterpriseValue(row);
-    const k = adjFcf(row.operatingCashFlow, row.capex, row.sbc, treatment);
+    const k = adjFcf(
+      row.operatingCashFlow,
+      row.capex,
+      row.sbc,
+      treatment,
+      row.depreciationAmortization ?? null,
+    );
     const { revenue: d, operatingIncome: f } = row;
 
     // Z34: =iferror(if(X<0, if(F<0,0,F), if(F>X, F-X, 0)),"")

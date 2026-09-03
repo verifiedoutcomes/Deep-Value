@@ -23,7 +23,13 @@ export function computeHeaderMetrics(
   const F = ttm.operatingIncome; // F53
   const X = ttm.netIncome; // X53
   const T = ttm.tangibleBook; // T53
-  const K = adjFcf(ttm.operatingCashFlow, ttm.capex, ttm.sbc, treatment); // K53
+  const K = adjFcf(
+    ttm.operatingCashFlow,
+    ttm.capex,
+    ttm.sbc,
+    treatment,
+    ttm.depreciationAmortization ?? null,
+  ); // K53
   const Q = M == null ? null : P + M; // Q53 = P53 + M53
 
   const pTangBook = safeDiv(P, T); // Q121

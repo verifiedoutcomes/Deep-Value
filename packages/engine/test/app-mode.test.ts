@@ -149,3 +149,42 @@ describe('soundest-logic flags (app mode)', () => {
     expect(v.horizonPriceChange!).toBeCloseTo(Math.pow(1 + v.irr!, 5) - 1, 6);
   });
 });
+
+describe("owner-earnings capex treatment (OCF − D&A − SBC)", () => {
+  it('blanks honestly without D&A, computes with it; sheet/conventional untouched', () => {
+    const rows = structuredClone(fixture.rows);
+    const n = rows.length;
+    const ttm = rows[n - 1]!;
+    const noDa = computeDerivedRows(rows, 'owner');
+    expect(noDa[n - 1]!.adjFcf).toBeNull();
+
+    ttm.depreciationAmortization = 15_000_000_000;
+    const withDa = computeDerivedRows(rows, 'owner');
+    expect(withDa[n - 1]!.adjFcf!).toBeCloseTo(
+      ttm.operatingCashFlow! - 15_000_000_000 - ttm.sbc!,
+      2,
+    );
+    // sits between the sheet convention (adds capex back) and conventional
+    const sheet = computeDerivedRows(rows, 'sheet')[n - 1]!.adjFcf!;
+    const conv = computeDerivedRows(rows, 'conventional')[n - 1]!.adjFcf!;
+    expect(withDa[n - 1]!.adjFcf!).toBeLessThan(sheet);
+    expect(withDa[n - 1]!.adjFcf!).toBeGreaterThan(conv);
+    // the gate's convention is unaffected by the new field
+    expect(sheet).toBeCloseTo(165064000000, 0);
+  });
+
+  it('full analysis under owner treatment never emits NaN/Infinity', () => {
+    const a = analyzeCompany(fixture, {}, 'owner');
+    const walk = (v: unknown): void => {
+      if (typeof v === 'number') expect(Number.isFinite(v)).toBe(true);
+      else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+    };
+    walk(a);
+    // No D&A in the fixture: Adj FCF (and its yield) blank honestly. The
+    // op-margin column still seeds non-zero, so — exactly like the bank
+    // archetype — the sheet's countif gate stays open and the scenario
+    // computes from the terminal value alone rather than saying No Forecast.
+    expect(a.header.adjFcfYield).toBeNull();
+    expect(['ok', 'no-forecast']).toContain(a.scenarios.base[5].status);
+  });
+});

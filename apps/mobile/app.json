@@ -47,8 +47,14 @@
       }
     },
     "plugins": ["expo-router", "expo-sqlite", "expo-secure-store"],
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png"
+    },
     "experiments": {
-      "typedRoutes": false
+      "typedRoutes": false,
+      "baseUrl": "/Deep-Value"
     },
     "extra": {
       "proxyBaseUrl": "https://dvh-proxy.example.workers.dev"

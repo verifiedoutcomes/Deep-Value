@@ -138,6 +138,7 @@ export class FmpProvider implements DataProvider {
       // exactly the sheet's stored convention -- passed through unchanged.
       capex: num(r.capitalExpenditure),
       sbc: num(r.stockBasedCompensation),
+      depreciationAmortization: num(r.depreciationAndAmortization),
     }));
     merge(balance, (r) => ({
       totalDebt: num(r.totalDebt),
@@ -170,6 +171,7 @@ export class FmpProvider implements DataProvider {
         operatingCashFlow: f.operatingCashFlow ?? null,
         capex: f.capex ?? null,
         sbc: f.sbc ?? null,
+        depreciationAmortization: f.depreciationAmortization ?? null,
         grossProfit: f.grossProfit ?? null,
         netIncome: f.netIncome ?? null,
         totalDebt: f.totalDebt ?? null,
@@ -221,6 +223,7 @@ export class FmpProvider implements DataProvider {
       operatingCashFlow: sum(cashflow, 'operatingCashFlow'),
       capex: sum(cashflow, 'capitalExpenditure'),
       sbc: sum(cashflow, 'stockBasedCompensation'),
+      depreciationAmortization: sum(cashflow, 'depreciationAndAmortization'),
       totalDebt: num((b as Json).totalDebt),
       cash: cashEq,
       tangibleBook:

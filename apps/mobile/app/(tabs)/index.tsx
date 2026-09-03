@@ -7,7 +7,6 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   FlatList,
   PanResponder,
@@ -17,6 +16,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { showAlert } from '../../src/alert';
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import { analyzeCompany } from '@dvh/engine';
 import { activeSnapshot, MAX_GROUP_SIZE, useAppStore } from '../../src/store';
@@ -146,10 +146,10 @@ function WatchRow({ ticker }: { ticker: string }) {
         text: `Move to ${g.name}`,
         onPress: () => {
           const err = moveToGroup(ticker, g.name);
-          if (err) Alert.alert('Cannot move', err);
+          if (err) showAlert('Cannot move', err);
         },
       }));
-    Alert.alert(ticker, 'Snapshots and scenario edits are kept either way.', [
+    showAlert(ticker, 'Snapshots and scenario edits are kept either way.', [
       { text: 'Cancel', style: 'cancel' },
       ...moveButtons,
       {
@@ -243,7 +243,7 @@ export default function WatchlistScreen() {
     const err = addToWatchlist(t);
     if (err) {
       warningHaptic();
-      Alert.alert('Cannot add', err);
+      showAlert('Cannot add', err);
     } else {
       tapHaptic();
       setQuery('');
@@ -259,7 +259,7 @@ export default function WatchlistScreen() {
     const err = addGroup(groupDraft);
     if (err) {
       warningHaptic();
-      Alert.alert('Cannot create group', err);
+      showAlert('Cannot create group', err);
     } else {
       tapHaptic();
       setGroupDraft('');
@@ -330,7 +330,7 @@ export default function WatchlistScreen() {
             onLongPress={() => {
               if (groups.length <= 1) return;
               warningHaptic();
-              Alert.alert(
+              showAlert(
                 `Delete "${g.name}"?`,
                 g.tickers.length
                   ? `${g.tickers.length} tickers will leave the watchlist (their data is kept).`

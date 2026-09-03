@@ -417,7 +417,34 @@ disagreed, **the file won**; those cases are called out explicitly.
     IRR's companion metric instead; the parity field remains in the
     engine, with the identity pinned by a test.
 
-49. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
+49. **Web demo on GitHub Pages (2026-09-03).** The real app now builds
+    for the browser (react-native-web) and deploys to
+    https://verifiedoutcomes.github.io/Deep-Value/ on every push to main,
+    with the interface mockup served alongside at /mockup/ (the static
+    HTML committed under apps/mobile/public/mockup, recovered from the
+    published artifact — every number in it is engine output).
+    Platform-split modules keep native-only code out of the web bundle:
+    `storage.native.ts` (expo-sqlite kv-store) vs `storage.web.ts`
+    (localStorage with an in-memory fallback), and a `showAlert` shim
+    maps confirmations to window.confirm on web (react-native-web's
+    Alert is a no-op, which would have silently swallowed every
+    destructive confirmation). Output mode is a single-page bundle with a
+    404.html fallback so deep links work on Pages; `experiments.baseUrl`
+    is set to the repo path. The Claude artifact mockup remains live but
+    private; Pages is the shareable, public home.
+
+50. **Owner-earnings capex treatment (2026-09-03).** A third option
+    alongside sheet/conventional: Adj FCF = OCF − D&A − SBC — Buffett's
+    owner earnings with depreciation & amortization as the maintenance-
+    capex proxy (Greenwald's growth-capex split is the natural next
+    refinement; it needs PP&E history, already fetched). D&A flows from
+    FMP (`depreciationAndAmortization`) and EDGAR
+    (DepreciationDepletionAndAmortization et al.); the fixture carries
+    none, so owner mode shows honest dashes on the bundled sample and
+    the META gate is unaffected. Tests pin that owner earnings sit
+    between the two existing conventions.
+
+51. **Fixture discipline.** `scripts/extract_fixture.py` extracts both
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.

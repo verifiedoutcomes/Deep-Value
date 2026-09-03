@@ -385,9 +385,9 @@ describe('golden companies: every sector archetype analyses without garbage', ()
         expect(base5States).toContain(analysis.scenarios.base[5].status);
       });
 
-      it('conventional capex treatment also stays clean', () => {
-        const analysis = analyzeCompany(snapshot, {}, 'conventional');
-        assertNoBadNumbers(analysis, `${name} (conventional)`);
+      it('conventional and owner capex treatments also stay clean', () => {
+        assertNoBadNumbers(analyzeCompany(snapshot, {}, 'conventional'), `${name} (conventional)`);
+        assertNoBadNumbers(analyzeCompany(snapshot, {}, 'owner'), `${name} (owner)`);
       });
 
       it('price-history helpers behave', () => {

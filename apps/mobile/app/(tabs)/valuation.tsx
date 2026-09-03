@@ -672,7 +672,8 @@ const styles = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
     marginRight: space.sm,
   },
-  fcol: { width: 108, paddingRight: space.sm },
+  // wide enough for the ± stepper in browser fonts too (web demo)
+  fcol: { width: 124, paddingRight: space.sm, overflow: 'hidden' },
   fhead: { height: 20, justifyContent: 'center' },
   frow: {
     height: FROW_H,
@@ -700,7 +701,7 @@ const styles = StyleSheet.create({
     fontSize: type.size.xs,
     paddingHorizontal: 4,
     paddingVertical: 4,
-    minWidth: 42,
+    width: 46,
     textAlign: 'right',
   },
   /* shared inputs */

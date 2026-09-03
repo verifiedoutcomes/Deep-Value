@@ -40,6 +40,8 @@ export interface AnnualFundamentals {
   /** NEGATIVE (cash outflow), matching the sheet convention I34:I53. */
   capex: Maybe;
   sbc: Maybe;
+  /** Depreciation & amortization (positive); owner-earnings proxy. */
+  depreciationAmortization?: Maybe;
   grossProfit: Maybe;
   netIncome: Maybe;
   totalDebt: Maybe;

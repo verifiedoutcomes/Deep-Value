@@ -44,6 +44,11 @@ const TAGS: Record<string, string[]> = {
     'PaymentsToAcquireProductiveAssets',
   ],
   sbc: ['ShareBasedCompensation'],
+  depreciationAmortization: [
+    'DepreciationDepletionAndAmortization',
+    'DepreciationAndAmortization',
+    'DepreciationAmortizationAndAccretionNet',
+  ],
   grossProfit: ['GrossProfit'],
   netIncome: ['NetIncomeLoss'],
   cash: ['CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents', 'CashAndCashEquivalentsAtCarryingValue'],
@@ -123,6 +128,7 @@ export class SecEdgarProvider implements DataProvider {
         // NEGATIVE (sheet convention), so negate here at the boundary.
         capex: capexOutflow == null ? null : -capexOutflow,
         sbc: v('sbc'),
+        depreciationAmortization: v('depreciationAmortization'),
         grossProfit: v('grossProfit'),
         netIncome,
         totalDebt: ltd == null && std == null ? null : (ltd ?? 0) + (std ?? 0),

@@ -8,7 +8,7 @@
  */
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import Storage from 'expo-sqlite/kv-store';
+import { appStorage } from './storage';
 import * as SecureStore from 'expo-secure-store';
 import type {
   CompanySnapshot,
@@ -429,7 +429,7 @@ export const useAppStore = create<AppState>()(
         }
         return state;
       },
-      storage: createJSONStorage(() => Storage),
+      storage: createJSONStorage(() => appStorage()),
       // The API key must never touch the SQLite-persisted JSON: it lives
       // in the Keychain and is re-hydrated by hydrateSecureState().
       // reviewingId is transient UI state.

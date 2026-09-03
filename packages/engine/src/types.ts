@@ -42,6 +42,12 @@ export interface HistoricalRowInput {
    */
   enterpriseValue?: Maybe; // Q
   /**
+   * Depreciation & amortization (positive), used ONLY by the 'owner'
+   * capex treatment as the maintenance-capex proxy. Not in the sheet;
+   * absent from the fixture; supplied by live providers.
+   */
+  depreciationAmortization?: Maybe;
+  /**
    * TTM row only: revenue of the PRIOR trailing-twelve-month window
    * (quarters 5..8 back). When present, TTM Y/Y = revenue/priorTtm − 1 —
    * a true non-overlapping year-over-year. When absent, the sheet's

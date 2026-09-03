@@ -101,6 +101,23 @@ Note the "Capex treatment" setting: the default replicates the sheet
 (`Adj FCF = OCF + |capex| − SBC`, because capex is stored negative). See
 DECISIONS.md §1 before changing it.
 
+## Web demo (GitHub Pages)
+
+The real app also runs in a browser via react-native-web, so anyone can
+try it without Expo Go or a Mac:
+
+- **Live app:** https://verifiedoutcomes.github.io/Deep-Value/
+- **Interface mockup:** https://verifiedoutcomes.github.io/Deep-Value/mockup/
+
+`.github/workflows/pages.yml` exports the web bundle and deploys it on
+every push to `main`. One-time setup by a repo admin: **Settings → Pages →
+Source: "GitHub Actions"**. The demo ships the bundled META snapshot; live
+refresh needs a proxy URL or dev key exactly like the phone app, and state
+persists in the browser's localStorage.
+
+Local web build: `cd apps/mobile && npx expo export --platform web` (or
+`npx expo start --web` for a dev server).
+
 ## App Store
 
 You need an Apple Developer account (**$99/yr**). Release path: EAS Build

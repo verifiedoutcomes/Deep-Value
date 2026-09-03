@@ -33,6 +33,7 @@ function toRow(
     operatingCashFlow: mul(f.operatingCashFlow, fx),
     capex: mul(f.capex, fx), // negative in, negative out
     sbc: mul(f.sbc, fx),
+    depreciationAmortization: mul(f.depreciationAmortization ?? null, fx),
     netDebt,
     shares: f.shares, // share counts are currency-free
     marketCap: f.marketCap, // provider reports these in USD already
@@ -53,6 +54,7 @@ function emptyRow(year: number, fx: number): HistoricalRowInput {
     operatingCashFlow: 0,
     capex: 0,
     sbc: 0,
+    depreciationAmortization: 0,
     netDebt: 0,
     shares: 0,
     marketCap: 0,

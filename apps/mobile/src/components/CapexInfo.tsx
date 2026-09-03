@@ -30,7 +30,12 @@ export function CapexInfoTag({ compact = false }: { compact?: boolean }) {
       >
         {!compact && (
           <Mono size="xs" color={colors.textFaint}>
-            Adj FCF = {capexTreatment === 'sheet' ? 'OCF + |capex| − SBC' : 'OCF − |capex| − SBC'}{' '}
+            Adj FCF ={' '}
+            {capexTreatment === 'sheet'
+              ? 'OCF + |capex| − SBC'
+              : capexTreatment === 'owner'
+                ? 'OCF − D&A − SBC (owner)'
+                : 'OCF − |capex| − SBC'}{' '}
           </Mono>
         )}
         <Mono size="xs" color={colors.blue}>ⓘ</Mono>
@@ -61,13 +66,24 @@ export function CapexInfoTag({ compact = false }: { compact?: boolean }) {
                   setCapexTreatment('conventional');
                 }}
               />
+              <Chip
+                label="Owner: OCF − D&A − SBC"
+                active={capexTreatment === 'owner'}
+                onPress={() => {
+                  toggleHaptic();
+                  setCapexTreatment('owner');
+                }}
+              />
             </View>
             <Mono size="xs" color={colors.textDim}>
-              The sheet stores capex as a NEGATIVE number and computes Adjusted FCF as
-              OCF − capex − SBC, which adds the absolute value of capex back. That is the
-              original model's convention and the default here. The conventional alternative
-              subtracts capex instead. Changing this reprices everything downstream — margins,
-              yields, forecasts, fair values and IRRs.
+              Sheet (default): capex is stored NEGATIVE and Adjusted FCF = OCF − capex − SBC,
+              which ADDS capex back — every dollar of capex is treated as growth investment.
+              Conventional: subtracts capex — every dollar is a cost. Owner earnings (Buffett):
+              subtracts only depreciation & amortization as the proxy for the maintenance capex
+              needed to defend today's earnings power — the middle path. Owner earnings needs
+              D&A, which live pulls supply; the bundled sample snapshot has none, so it shows
+              dashes there. Changing this reprices everything downstream — margins, yields,
+              forecasts, fair values and IRRs.
             </Mono>
             <Pressable style={styles.close} onPress={() => setOpen(false)}>
               <Mono size="sm" color={colors.textDim}>close</Mono>
