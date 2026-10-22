@@ -5,6 +5,7 @@
  */
 import React from 'react';
 import {
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -17,7 +18,9 @@ import type { DerivedRow, HistoricalRowInput, Maybe, SummaryStats } from '@dvh/e
 import { momentumFromHistory, sparklineWindow } from '@dvh/engine';
 import { useTickerAnalysis } from '../../src/analysis';
 import { useRefreshSnapshot } from '../../src/data';
-import { useAppStore, BUNDLED_META } from '../../src/store';
+import { useAppStore } from '../../src/store';
+import { isLibrarySnapshot } from '../../src/library';
+import { NETWORK_BLOCKED, PREVIEW_OFFLINE_MESSAGE } from '../../src/host';
 import { colors, deltaColor, space, type } from '../../src/theme';
 import { tapHaptic } from '../../src/haptics';
 import { Banner, Card, Chip, KV, Mono, SectionTitle } from '../../src/components/ui';
@@ -84,12 +87,27 @@ export default function CompanyScreen() {
   const { ticker, snapshot, analysis, capexTreatment, reviewing } = useTickerAnalysis();
   const refresh = useRefreshSnapshot(ticker);
 
+  // Pull-to-refresh is native-only (react-native-web renders no gesture),
+  // so web gets an explicit button; the Claude preview has no network.
+  const refreshAction =
+    Platform.OS === 'web' && !NETWORK_BLOCKED && !reviewing
+      ? {
+          label: refresh.isPending ? 'refreshing…' : '↻ refresh',
+          onPress: () => refresh.mutate(),
+          disabled: refresh.isPending,
+        }
+      : undefined;
+  const refreshHint = Platform.OS === 'web' ? 'tap refresh' : 'pull down to refresh';
+
   if (!snapshot || !analysis) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, padding: space.lg }}>
-        <Banner>
-          No snapshot for {ticker} yet — pull live data with the refresh gesture, or configure
-          the data proxy in Settings.
+        <Banner tone={refresh.isError ? 'warn' : 'info'} action={refreshAction}>
+          {NETWORK_BLOCKED
+            ? `No bundled snapshot for ${ticker}. ${PREVIEW_OFFLINE_MESSAGE}`
+            : refresh.isError
+              ? `Refresh failed: ${refresh.error instanceof Error ? refresh.error.message : 'network'}`
+              : `No snapshot for ${ticker} yet — ${refreshHint} to pull live data (needs the data proxy or a dev API key in Settings).`}
         </Banner>
       </View>
     );
@@ -99,25 +117,27 @@ export default function CompanyScreen() {
   const own = snapshot.ownership;
   const momentum =
     own.momentum ?? momentumFromHistory(snapshot.priceHistory, snapshot.snapshotDate);
-  const isBundled = snapshot === BUNDLED_META;
+  const isBundled = isLibrarySnapshot(snapshot);
   const ageDays = Math.floor(
     (Date.now() - new Date(snapshot.snapshotDate).getTime()) / (24 * 3600 * 1000),
   );
   const stale = ageDays > 7;
-  const bannerText = isBundled
-    ? `Bundled snapshot ${snapshot.snapshotDate} — pull down to refresh live.`
+  const bannerText = NETWORK_BLOCKED
+    ? `Bundled snapshot ${snapshot.snapshotDate} · live refresh is off in the Claude preview.`
     : refresh.isError
       ? `Refresh failed (${refresh.error instanceof Error ? refresh.error.message : 'network'}). Showing snapshot ${snapshot.snapshotDate}.`
-      : stale
-        ? `Snapshot is ${ageDays} days old (${snapshot.snapshotDate}) — pull down to refresh.`
-        : `Snapshot ${snapshot.snapshotDate} — pull down to refresh.`;
+      : isBundled
+        ? `Bundled snapshot ${snapshot.snapshotDate} — ${refreshHint} for live data.`
+        : stale
+          ? `Snapshot is ${ageDays} days old (${snapshot.snapshotDate}) — ${refreshHint}.`
+          : `Snapshot ${snapshot.snapshotDate} — ${refreshHint}.`;
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bg }}
       refreshControl={
         // no live refresh while reviewing a frozen analysis
-        reviewing ? undefined : (
+        reviewing || NETWORK_BLOCKED ? undefined : (
           <RefreshControl
             refreshing={refresh.isPending}
             onRefresh={() => refresh.mutate()}
@@ -129,7 +149,12 @@ export default function CompanyScreen() {
     >
       <AnalysisBar reviewing={reviewing} />
       {!reviewing && (
-        <Banner tone={isBundled || stale || refresh.isError ? 'warn' : 'info'}>{bannerText}</Banner>
+        <Banner
+          tone={(isBundled && !NETWORK_BLOCKED) || stale || refresh.isError ? 'warn' : 'info'}
+          action={refreshAction}
+        >
+          {bannerText}
+        </Banner>
       )}
 
       <Card>

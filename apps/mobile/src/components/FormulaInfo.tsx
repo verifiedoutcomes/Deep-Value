@@ -35,8 +35,12 @@ export function FormulaProvider({ children }: { children: React.ReactNode }) {
               <ScrollView bounces={false}>
                 <View style={styles.head}>
                   <Mono size="md" bold>{spec.title}</Mono>
-                  <View style={styles.cellRef}>
-                    <Mono size="xs" color={colors.amber}>sheet {spec.cell}</Mono>
+                  <View
+                    style={[styles.cellRef, spec.origin === 'app' && { borderColor: colors.blue }]}
+                  >
+                    <Mono size="xs" color={spec.origin === 'app' ? colors.blue : colors.amber}>
+                      {spec.origin === 'app' ? `app · ${spec.cell}` : `sheet ${spec.cell}`}
+                    </Mono>
                   </View>
                 </View>
                 <View style={styles.formulaBox}>

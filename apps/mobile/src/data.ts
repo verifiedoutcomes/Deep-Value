@@ -2,6 +2,7 @@
  * Live data wiring: React Query hooks over the provider stack
  * (FMP via the proxy, USD-only FX at launch).
  */
+import { useMemo } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import {
@@ -15,6 +16,8 @@ import {
 import type { CompanySnapshot } from '@dvh/engine';
 import { BUNDLED_META, useAppStore } from './store';
 import { successHaptic, warningHaptic } from './haptics';
+import { NETWORK_BLOCKED, PREVIEW_OFFLINE_MESSAGE } from './host';
+import { searchLibrary } from './library';
 
 export function proxyBaseUrl(): string {
   const fromStore = useAppStore.getState().proxyBaseUrl;
@@ -26,6 +29,7 @@ export function proxyBaseUrl(): string {
 
 /** True when either a proxy or a dev key makes live pulls possible. */
 export function liveDataConfigured(): boolean {
+  if (NETWORK_BLOCKED) return false;
   return Boolean(proxyBaseUrl() || useAppStore.getState().devFmpApiKey);
 }
 
@@ -55,6 +59,10 @@ export function symbolFor(ticker: string): SymbolRef {
 export const FRESHNESS_HOURS = 6;
 
 export async function pullSnapshot(ticker: string): Promise<CompanySnapshot> {
+  if (NETWORK_BLOCKED) throw new Error(PREVIEW_OFFLINE_MESSAGE);
+  if (!liveDataConfigured()) {
+    throw new Error('No data source yet: add the data proxy (or a dev API key) in Settings.');
+  }
   const proxy = proxyBaseUrl();
   if (proxy) {
     // One request per company open: the proxy assembles and caches the
@@ -118,13 +126,35 @@ export function useRefreshSnapshot(ticker: string) {
   });
 }
 
+export interface SearchHit {
+  ticker: string;
+  exchange: string;
+  /** Present for bundled names, which open instantly with data. */
+  name?: string;
+  bundled: boolean;
+}
+
+/**
+ * Bundled names match instantly and offline; the provider search joins
+ * them when a data source is configured.
+ */
 export function useTickerSearch(query: string) {
-  return useQuery({
+  const live = liveDataConfigured();
+  const remote = useQuery({
     queryKey: ['search', query],
     queryFn: () => makeProvider().search(query),
-    enabled: query.trim().length >= 1 && liveDataConfigured(),
+    enabled: query.trim().length >= 1 && live,
     staleTime: 60_000,
   });
+  const data = useMemo<SearchHit[]>(() => {
+    const local = searchLibrary(query).map((h) => ({ ...h, bundled: true }));
+    const seen = new Set(local.map((h) => h.ticker));
+    const fromProvider = (remote.data ?? [])
+      .filter((r) => !seen.has(r.ticker))
+      .map((r) => ({ ticker: r.ticker, exchange: r.exchange, bundled: false }));
+    return [...local, ...fromProvider];
+  }, [query, remote.data]);
+  return { data, live, isLoading: remote.isLoading, isError: remote.isError };
 }
 
 /** Hidden dev screen: live META pull diffed against the bundled fixture. */

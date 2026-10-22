@@ -6,17 +6,25 @@
  * original Google Sheet.
  */
 import type {
+  CapexTreatment,
   HorizonYears,
+  ImpliedExpectations,
   Maybe,
+  ScenarioInputs,
   ScenarioValuation,
+  SensitivityGrid,
 } from '@dvh/engine';
 import type { ValuationAnchors } from '@dvh/engine';
+import { IMPLIED_GROWTH_RANGE } from '@dvh/engine';
 import { money, num, pct, price } from './format';
 
 export interface FormulaSpec {
   title: string;
-  /** Original sheet cell, so the app can be audited against the xlsx. */
+  /** Original sheet cell, so the app can be audited against the xlsx
+   *  (for app-only analyses: what it is instead, e.g. "reverse DCF"). */
   cell: string;
+  /** 'app' marks an analysis the sheet does not have. Default 'sheet'. */
+  origin?: 'sheet' | 'app';
   formula: string;
   /** The formula again, with live numbers substituted, then the result. */
   steps: string[];
@@ -108,37 +116,120 @@ export function forecastRevenueFormula(
   };
 }
 
-export function adjFcfMarginFormula(year: number, rev: number, margin: number, fcf: number): FormulaSpec {
+/** One line on how historical Adj FCF is defined under each treatment. */
+export function capexTreatmentNote(t: CapexTreatment): string {
+  return t === 'conventional'
+    ? 'Historical Adj FCF = OCF − |capex| − SBC (conventional: all capex is a cost).'
+    : t === 'owner'
+      ? 'Historical Adj FCF = OCF − D&A − SBC (owner earnings: D&A stands in for maintenance capex).'
+      : 'Historical Adj FCF = OCF + |capex| − SBC (sheet convention: capex stored negative, so it adds back).';
+}
+
+export function adjFcfMarginFormula(
+  year: number,
+  rev: number,
+  margin: number,
+  fcf: number,
+  treatment: CapexTreatment = 'sheet',
+): FormulaSpec {
   return {
     title: `${year} Adj FCF`,
     cell: 'I column',
     formula: 'Adj FCF = FCF margin × revenue',
     steps: [`= ${pct(margin)} × ${m(rev)}`, `= ${m(fcf)}`],
-    note: 'Historical Adj FCF = OCF + |capex| − SBC under the sheet convention (capex stored negative).',
+    note: `The seeded FCF margin is TTM Adj FCF ÷ TTM revenue. ${capexTreatmentNote(treatment)}`,
   };
 }
 
 export function exitMultipleFormula(
   horizon: HorizonYears,
-  kind: 'bear' | 'base' | 'bull',
   value: number,
   seeded5: number,
+  currentEvEbit: Maybe,
+  trimmedMean: Maybe,
 ): FormulaSpec {
-  const offset = kind === 'bear' ? 3 : 2;
+  // App mode: every scenario seeds from the trimmed mean and every 3-year
+  // multiple is the 5-year one − 2 (the sheet: current EV/EBIT; bear −3).
+  const seedLabel =
+    trimmedMean != null && Math.abs(seeded5 - trimmedMean) < 1e-9
+      ? 'trimmed-mean EV/EBIT'
+      : 'current EV/EBIT';
   return {
     title: 'Exit EV/EBIT multiple',
     cell: horizon === 5 ? 'N61' : 'N86',
     formula:
       horizon === 5
-        ? kind === 'base'
-          ? 'default = current EV/EBIT (S53); editable'
-          : 'default = 0 until you set one'
-        : `3-year multiple = 5-year multiple − ${offset}`,
+        ? `default = ${seedLabel} (40% trimmed mean of fiscal-year EV/EBIT, S54); editable`
+        : '3-year multiple = 5-year multiple − 2; editable',
     steps:
       horizon === 5
-        ? [`current EV/EBIT = ${num(seeded5, 4)}`, `in use = ${num(value, 4)}`]
-        : [`= ${num(value + offset, 4)} − ${offset}`, `= ${num(value, 4)}`],
-    note: 'Terminal EV = final-forecast-year operating income × this multiple. Terminal market cap = terminal EV − net debt + adjustment.',
+        ? [
+            `trimmed-mean EV/EBIT = ${num(trimmedMean, 2)}×`,
+            `current EV/EBIT = ${num(currentEvEbit, 2)}×`,
+            `seeded = ${num(seeded5, 2)}× · in use = ${num(value, 2)}×`,
+          ]
+        : [`= ${num(value + 2, 2)} − 2`, `= ${num(value, 2)}×`],
+    note:
+      'Seeding from the trimmed mean assumes the multiple reverts to its own history by the exit year (the sheet seeds today\'s multiple, which assumes no re-rating). Terminal EV = final-year operating income × this multiple; terminal market cap = terminal EV − net debt + adjustment.',
+  };
+}
+
+export function impliedFormula(
+  imp: ImpliedExpectations,
+  a: ValuationAnchors,
+  inputs: ScenarioInputs,
+  horizon: HorizonYears,
+): FormulaSpec {
+  const r = inputs.terminalDiscountRate;
+  const growthLine =
+    imp.revenueGrowth.value != null
+      ? `g* = ${pct(imp.revenueGrowth.value, 2)}/yr → ${horizon}-yr revenue ${m(
+          a.ttmRevenue * Math.pow(1 + imp.revenueGrowth.value, horizon),
+        )} vs TTM ${m(a.ttmRevenue)}`
+      : imp.revenueGrowth.bound === 'below'
+        ? `even ${pct(IMPLIED_GROWTH_RANGE[0], 0)}/yr leaves value above the price`
+        : imp.revenueGrowth.bound === 'above'
+          ? `even ${pct(IMPLIED_GROWTH_RANGE[1], 0)}/yr leaves value below the price`
+          : 'no solution: the final-year operating margin is not positive';
+  const multipleLine =
+    imp.exitMultiple.value != null
+      ? `m* = ${num(imp.exitMultiple.value, 2)}×`
+      : imp.exitMultiple.bound === 'below'
+        ? 'the forecast cash flows alone exceed the price (no terminal value needed)'
+        : 'no solution: final-year operating income is not positive';
+  return {
+    title: 'What the price implies',
+    cell: 'reverse DCF',
+    origin: 'app',
+    formula: 'solve intrinsic value = snapshot market cap  ⇔  fair value = price  ⇔  IRR = discount rate',
+    steps: [
+      `target = ${m(a.snapshotMarketCap)} at ${pct(r)} discount rate`,
+      'growth: one constant rate replaces your growth path; your margins, multiple and rates stay',
+      `  ${growthLine}`,
+      `  your path compounds at ${pct(imp.scenarioGrowthCagr, 2)}/yr`,
+      'exit multiple: intrinsic value is linear in it, so it solves exactly',
+      '  m* = ((cap − Σ PV FCF) × (1 + r)^n + net debt − adjustment) ÷ final-year op income',
+      `  ${multipleLine} vs your ${num(imp.scenarioExitMultiple, 2)}×`,
+    ],
+    note:
+      'Implied below yours means the price asks for less than your scenario assumes: that gap is your margin of safety. Implied above yours means you are relying on more than the market is paying for.',
+  };
+}
+
+export function sensitivityFormula(grid: SensitivityGrid, horizon: HorizonYears): FormulaSpec {
+  const c = grid.fairValue[grid.current.row]![grid.current.col];
+  return {
+    title: 'Fair value sensitivity',
+    cell: 'sensitivity grid',
+    origin: 'app',
+    formula: 'each cell re-runs this scenario with that exit multiple and discount rate',
+    steps: [
+      `columns: exit EV/EBIT ${grid.exitMultiples.map((x) => num(x, 1)).join(' · ')}`,
+      `rows: discount rate ${grid.discountRates.map((x) => pct(x, 0)).join(' · ')}`,
+      `centre = your inputs = ${price(c ?? null)}`,
+      `fair value = (Σ PV FCF + PV terminal cap) ÷ snapshot cap × price, over ${horizon} years`,
+    ],
+    note: 'Green cells are above today\'s price, red below. Rates move the FCF and terminal discount rates together, so the centre always matches the headline fair value.',
   };
 }
 

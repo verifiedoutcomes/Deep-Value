@@ -7,13 +7,15 @@
  *    with Revenue, Y/Y Δ (editable), Op Income, Op Margin (editable),
  *    Adj FCF Margin (editable), Adj FCF and PV of Adj FCF
  *  - terminal inputs (exit multiple, discount rate, adjustment)
+ *  - what the price implies (reverse DCF) and the fair-value sensitivity
+ *    grid — app-only lenses, flagged as such in their ⓘ cards
  *  - IRR-at-price strip, margin of safety, verdict
  *
  * Every computed number carries an (i) tag that opens the formula with
  * live values substituted, so the whole calculation can be followed from
  * TTM revenue to fair value.
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -24,18 +26,26 @@ import {
   View,
 } from 'react-native';
 import type {
+  CapexTreatment,
   HorizonYears,
+  ImpliedExpectations,
+  ImpliedValue,
   Maybe,
   ScenarioKind,
   ScenarioOverrides,
   ScenarioValuation,
+  SensitivityGrid,
   ValuationAnchors,
 } from '@dvh/engine';
 import {
+  checkAssumptions,
   DEFAULT_DISCOUNT_RATE,
   DEFAULT_MOS_THRESHOLDS,
   derive3yExitMultiple,
+  fadeGrowth,
+  impliedExpectations,
   seedBaseScenario,
+  sensitivityGrid,
 } from '@dvh/engine';
 import { useTickerAnalysis } from '../../src/analysis';
 import { useAppStore } from '../../src/store';
@@ -43,6 +53,7 @@ import { tapHaptic, toggleHaptic } from '../../src/haptics';
 import { colors, deltaColor, space, type } from '../../src/theme';
 import { Banner, Card, Chip, Mono, SectionTitle } from '../../src/components/ui';
 import { AnalysisBar } from '../../src/components/AnalysisBar';
+import { AssumptionChecks } from '../../src/components/AssumptionChecks';
 import { CapexInfoTag } from '../../src/components/CapexInfo';
 import { FormulaProvider, InfoTag } from '../../src/components/FormulaInfo';
 import {
@@ -50,9 +61,11 @@ import {
   exitMultipleFormula,
   fairValueFormula,
   forecastRevenueFormula,
+  impliedFormula,
   irrFormula,
   irrStripFormula,
   pvOfFcfFormula,
+  sensitivityFormula,
   targetBuyFormula,
 } from '../../src/formulas';
 import { money, pct, pctSigned, price } from '../../src/format';
@@ -71,9 +84,22 @@ export default function ValuationScreen() {
   const setOverrides = useAppStore((s) => s.setOverrides);
   const setHorizon = useAppStore((s) => s.setHorizon);
   const setScenarioTab = useAppStore((s) => s.setScenarioTab);
+  const setCapexTreatment = useAppStore((s) => s.setCapexTreatment);
   const readOnly = reviewing != null;
 
-  if (!snapshot || !analysis) {
+  // app-only lenses over the open scenario (cheap: no IRR solves)
+  const lenses = useMemo(() => {
+    if (!analysis) return null;
+    const inputs = analysis.scenarioInputs[kind][horizon];
+    return {
+      inputs,
+      implied: impliedExpectations(analysis.anchors, inputs),
+      grid: sensitivityGrid(analysis.anchors, inputs),
+      flags: checkAssumptions(analysis, kind, horizon, capexTreatment),
+    };
+  }, [analysis, kind, horizon, capexTreatment]);
+
+  if (!snapshot || !analysis || !lenses) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, padding: space.lg }}>
         <Banner>No snapshot for {ticker} yet — load one from the Company tab.</Banner>
@@ -151,6 +177,21 @@ export default function ValuationScreen() {
 
   const finalYear = anchors.firstForecastYear + horizon - 1;
 
+  const setYearsAll = (next: typeof years) =>
+    patch({ years: { ...overrides.years, [kind]: { ...overrides.years?.[kind], [horizon]: next } } });
+  const checkActions = {
+    fadeGrowth: () => setYearsAll(fadeGrowth(lenses.inputs.years)),
+    useMultiple: (m: number) =>
+      horizon === 5
+        ? patch({ exitMultiple5: { ...overrides.exitMultiple5, [kind]: m } })
+        : patch({ exitMultiple3: { ...overrides.exitMultiple3, [kind]: m } }),
+    useOwnerEarnings: () => setCapexTreatment('owner'),
+    useConventional: () => setCapexTreatment('conventional'),
+    useOpMargin: (m: number) =>
+      setYearsAll(lenses.inputs.years.map((y) => ({ ...y, operatingMargin: m }))),
+  };
+  const ownerAvailable = snapshot.rows[snapshot.rows.length - 1]?.depreciationAmortization != null;
+
   return (
     <FormulaProvider>
     <KeyboardAvoidingView
@@ -202,6 +243,13 @@ export default function ValuationScreen() {
         horizon={horizon}
         priceToday={snapshot.quote.price}
       />
+      <AssumptionChecks
+        flags={lenses.flags}
+        finalYear={finalYear}
+        ownerAvailable={ownerAvailable}
+        readOnly={readOnly}
+        actions={checkActions}
+      />
 
       {/* ---- the sheet's forecast block (rows 61:67 / 86:92) ---- */}
       <Card style={{ paddingHorizontal: 0 }}>
@@ -221,6 +269,7 @@ export default function ValuationScreen() {
           years={years}
           fcfRate={fcfRate}
           setYear={setYear}
+          capexTreatment={capexTreatment}
         />
         <View style={{ paddingHorizontal: space.md, gap: 4 }}>
           <Mono size="xs" color={colors.textFaint}>
@@ -237,7 +286,15 @@ export default function ValuationScreen() {
           label={`exit EV/EBIT at ${finalYear}`}
           value={exitCurrent}
           digits={1}
-          info={() => exitMultipleFormula(horizon, kind, exitCurrent, seededExit5)}
+          info={() =>
+            exitMultipleFormula(
+              horizon,
+              exitCurrent,
+              seededExit5,
+              analysis.header.evOverOperatingIncome,
+              analysis.summary.evEbitTrimmean,
+            )
+          }
           onCommit={(v) =>
             horizon === 5
               ? patch({ exitMultiple5: { ...overrides.exitMultiple5, [kind]: v } })
@@ -265,6 +322,23 @@ export default function ValuationScreen() {
           }
         />
       </Card>
+
+      {valuation.status === 'ok' && (
+        <>
+          <ImpliedCard
+            implied={lenses.implied}
+            priceToday={snapshot.quote.price}
+            kind={kind}
+            horizon={horizon}
+            info={() => impliedFormula(lenses.implied, anchors, lenses.inputs, horizon)}
+          />
+          <SensitivityCard
+            grid={lenses.grid}
+            priceToday={snapshot.quote.price}
+            info={() => sensitivityFormula(lenses.grid, horizon)}
+          />
+        </>
+      )}
 
       <Card>
         <SectionTitle>Base-case IRR at price</SectionTitle>
@@ -411,6 +485,170 @@ function ResultCard({
   );
 }
 
+/* ---------------- reverse DCF + sensitivity (app-only) ---------------- */
+
+function impliedText(v: ImpliedValue, fmt: (x: number) => string, lo: string, hi: string): string {
+  if (v.value != null) return fmt(v.value);
+  return v.bound === 'below' ? lo : v.bound === 'above' ? hi : 'n/a';
+}
+
+function ImpliedCard({
+  implied,
+  priceToday,
+  kind,
+  horizon,
+  info,
+}: {
+  implied: ImpliedExpectations;
+  priceToday: number;
+  kind: ScenarioKind;
+  horizon: HorizonYears;
+  info: () => import('../../src/formulas').FormulaSpec;
+}) {
+  const rows: { label: string; implied: string; yours: string; cushion: boolean | null }[] = [
+    {
+      label: 'revenue growth / yr',
+      implied: impliedText(implied.revenueGrowth, (x) => pct(x), '< −50%', '> 100%'),
+      yours: pct(implied.scenarioGrowthCagr),
+      cushion:
+        implied.revenueGrowth.value != null
+          ? implied.revenueGrowth.value <= implied.scenarioGrowthCagr
+          : implied.revenueGrowth.bound === 'below'
+            ? true
+            : implied.revenueGrowth.bound === 'above'
+              ? false
+              : null,
+    },
+    {
+      label: 'exit EV/EBIT',
+      implied: impliedText(implied.exitMultiple, (x) => `${x.toFixed(1)}×`, '< 0×', 'n/a'),
+      yours: `${implied.scenarioExitMultiple.toFixed(1)}×`,
+      cushion:
+        implied.exitMultiple.value != null
+          ? implied.exitMultiple.value <= implied.scenarioExitMultiple
+          : implied.exitMultiple.bound === 'below'
+            ? true
+            : null,
+    },
+  ];
+  return (
+    <Card>
+      <View style={styles.assumTitleRow}>
+        <SectionTitle>
+          Priced in at {price(priceToday)} · {kind} {horizon}yr
+        </SectionTitle>
+        <InfoTag spec={info} />
+      </View>
+      <View style={styles.impHead}>
+        <View style={{ flex: 1 }} />
+        <View style={styles.impCol}>
+          <Mono size="xs" color={colors.textFaint}>implied</Mono>
+        </View>
+        <View style={styles.impCol}>
+          <Mono size="xs" color={colors.textFaint}>yours</Mono>
+        </View>
+      </View>
+      {rows.map((r) => (
+        <View key={r.label} style={styles.impRow}>
+          <View style={{ flex: 1 }}>
+            <Mono size="sm" color={colors.textDim}>{r.label}</Mono>
+          </View>
+          <View style={styles.impCol}>
+            <Mono
+              size="md"
+              bold
+              color={r.cushion == null ? colors.textDim : r.cushion ? colors.accent : colors.red}
+            >
+              {r.implied}
+            </Mono>
+          </View>
+          <View style={styles.impCol}>
+            <Mono size="sm" color={colors.text}>{r.yours}</Mono>
+          </View>
+        </View>
+      ))}
+      <Mono size="xs" color={colors.textFaint}>
+        what today's price already pays for, each holding the rest of this scenario fixed ·
+        green = the market asks less than you assume
+      </Mono>
+    </Card>
+  );
+}
+
+/** Whole dollars when that is precise enough, cents for low prices. */
+function cellPrice(v: Maybe): string {
+  if (v == null) return '–';
+  return v >= 100 ? `$${Math.round(v)}` : `$${v.toFixed(2)}`;
+}
+
+function SensitivityCard({
+  grid,
+  priceToday,
+  info,
+}: {
+  grid: SensitivityGrid;
+  priceToday: number;
+  info: () => import('../../src/formulas').FormulaSpec;
+}) {
+  return (
+    <Card>
+      <View style={styles.assumTitleRow}>
+        <SectionTitle>Fair value · exit multiple × rate</SectionTitle>
+        <InfoTag spec={info} />
+      </View>
+      <View style={styles.sensRow}>
+        <View style={styles.sensLabel}>
+          <Mono size="xs" color={colors.textFaint}>rate</Mono>
+        </View>
+        {grid.exitMultiples.map((x, c) => (
+          <View key={c} style={styles.sensCell}>
+            <Mono size="xs" color={c === grid.current.col ? colors.amber : colors.textFaint} bold>
+              {x.toFixed(1)}×
+            </Mono>
+          </View>
+        ))}
+      </View>
+      {grid.fairValue.map((row, r) => (
+        <View key={r} style={styles.sensRow}>
+          <View style={styles.sensLabel}>
+            <Mono size="xs" color={r === grid.current.row ? colors.amber : colors.textFaint} bold>
+              {pct(grid.discountRates[r]!, 0)}
+            </Mono>
+          </View>
+          {row.map((fv, c) => {
+            const centre = r === grid.current.row && c === grid.current.col;
+            return (
+              <View
+                key={c}
+                style={[
+                  styles.sensCell,
+                  styles.sensValue,
+                  {
+                    backgroundColor:
+                      fv == null ? 'transparent' : fv >= priceToday ? colors.accentDim : colors.redDim,
+                  },
+                  centre && styles.sensCentre,
+                ]}
+              >
+                <Mono
+                  size="xs"
+                  bold={centre}
+                  color={fv == null ? colors.textFaint : fv >= priceToday ? colors.text : colors.redSoft}
+                >
+                  {cellPrice(fv)}
+                </Mono>
+              </View>
+            );
+          })}
+        </View>
+      ))}
+      <Mono size="xs" color={colors.textFaint}>
+        centre = your inputs · green ≥ today's {price(priceToday)}, red below
+      </Mono>
+    </Card>
+  );
+}
+
 /* ---------------- the sheet-like forecast table ---------------- */
 
 const FROW_H = 34;
@@ -421,12 +659,14 @@ function ForecastTable({
   years,
   fcfRate,
   setYear,
+  capexTreatment,
 }: {
   valuation: ScenarioValuation;
   anchors: ValuationAnchors;
   years: { revenueYoY: number; operatingMargin: number; adjFcfMargin: number }[];
   fcfRate: number;
   setYear: (idx: number, f: 'revenueYoY' | 'operatingMargin' | 'adjFcfMargin', v: number) => void;
+  capexTreatment: CapexTreatment;
 }) {
   const f = valuation.forecast;
   return (
@@ -503,7 +743,9 @@ function ForecastTable({
             <View key={t} style={[styles.frow, styles.fcomputed]}>
               <Mono size="xs">{money(row.adjFcf)}</Mono>
               <InfoTag
-                spec={() => adjFcfMarginFormula(row.year, row.revenue, row.adjFcfMargin, row.adjFcf)}
+                spec={() =>
+                  adjFcfMarginFormula(row.year, row.revenue, row.adjFcfMargin, row.adjFcf, capexTreatment)
+                }
               />
             </View>
           ))}
@@ -765,5 +1007,20 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   verdictRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  impHead: { flexDirection: 'row', marginBottom: 2 },
+  impRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginBottom: 2,
+  },
+  impCol: { width: 76, alignItems: 'flex-end' },
+  sensRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 3, gap: 3 },
+  sensLabel: { width: 34 },
+  sensCell: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 24 },
+  sensValue: { borderRadius: 3 },
+  sensCentre: { borderColor: colors.amber, borderWidth: 1 },
   verdictCell: { flex: 1, alignItems: 'center' },
 });

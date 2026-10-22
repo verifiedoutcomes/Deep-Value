@@ -6,6 +6,8 @@ import { useAppStore, activeSnapshot } from '../src/store';
 import { colors, space, type } from '../src/theme';
 import { Card, Mono, SectionTitle } from '../src/components/ui';
 import { toggleHaptic } from '../src/haptics';
+import { NETWORK_BLOCKED, PREVIEW_OFFLINE_MESSAGE } from '../src/host';
+import { BUNDLED_META, LIBRARY, LIBRARY_TICKERS } from '../src/library';
 
 export default function SettingsScreen() {
   const devMode = useAppStore((s) => s.devMode);
@@ -74,6 +76,20 @@ export default function SettingsScreen() {
         </Mono>
       </Card>
 
+      {NETWORK_BLOCKED ? (
+        <Card>
+          <SectionTitle>Data · Claude preview</SectionTitle>
+          <Mono size="xs" color={colors.textDim}>{PREVIEW_OFFLINE_MESSAGE}</Mono>
+          <View style={{ height: space.sm }} />
+          <Mono size="xs" color={colors.textFaint}>
+            Bundled: {LIBRARY_TICKERS.join(' · ')} (snapshots of{' '}
+            {[...new Set(LIBRARY_TICKERS.map((t) => LIBRARY[t]![0]!.snapshotDate))].join(', ')}).
+            META also keeps the sheet's {BUNDLED_META.snapshotDate} snapshot: pin it above to
+            compare.
+          </Mono>
+        </Card>
+      ) : (
+      <>
       <Card>
         <SectionTitle>Data proxy</SectionTitle>
         <TextInput
@@ -142,6 +158,8 @@ export default function SettingsScreen() {
           </Link>
         )}
       </Card>
+      </>
+      )}
 
       <Card>
         <SectionTitle>About · Legal</SectionTitle>

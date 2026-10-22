@@ -17,9 +17,9 @@ import type {
 import type { CapexTreatment, HorizonYears, ScenarioKind } from '@dvh/engine';
 import { CHECKLIST_QUESTIONS, analyzeCompany } from '@dvh/engine';
 import { APP_ANALYZE_OPTIONS } from './engineOptions';
-import metaFixture from '@dvh/engine/fixtures/meta-2026-07-10.json';
+import { LIBRARY, LIBRARY_TICKERS, stripLibrary, withLibrary } from './library';
 
-export const BUNDLED_META = metaFixture as unknown as CompanySnapshot;
+export { BUNDLED_META } from './library';
 
 export interface ChecklistItem {
   question: string;
@@ -171,6 +171,12 @@ const emptyTicker = (): TickerState => ({
   scenarioTab: 'base',
 });
 
+/** A new ticker's state, starting from any snapshots bundled for it. */
+const seedTicker = (t: string): TickerState => ({
+  ...emptyTicker(),
+  snapshots: LIBRARY[t] ?? [],
+});
+
 const withChecklistEdit = (
   s: AppState,
   t: string,
@@ -183,10 +189,11 @@ const withChecklistEdit = (
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
-      // First-run experience: META pre-loaded from the bundled snapshot.
-      watchlistGroups: [{ name: 'Main', tickers: ['META'] }],
+      // First run: every bundled name pre-loaded (META from the sheet
+      // fixture, plus any snapshots the hosting page preloads).
+      watchlistGroups: [{ name: 'Main', tickers: LIBRARY_TICKERS.slice(0, MAX_GROUP_SIZE) }],
       activeGroup: 'Main',
-      tickers: { META: { ...emptyTicker(), snapshots: [BUNDLED_META] } },
+      tickers: Object.fromEntries(LIBRARY_TICKERS.map((t) => [t, seedTicker(t)])),
       selectedTicker: 'META',
       capexTreatment: 'sheet',
       proxyBaseUrl: '',
@@ -280,7 +287,7 @@ export const useAppStore = create<AppState>()(
         set((s) => ({
           selectedTicker: t,
           reviewingId: null, // switching tickers always leaves review mode
-          tickers: s.tickers[t] ? s.tickers : { ...s.tickers, [t]: emptyTicker() },
+          tickers: s.tickers[t] ? s.tickers : { ...s.tickers, [t]: seedTicker(t) },
         })),
       addSnapshot: (t, snap) =>
         set((s) => {
@@ -343,7 +350,7 @@ export const useAppStore = create<AppState>()(
           watchlistGroups: s.watchlistGroups.map((x) =>
             x.name === name ? { ...x, tickers: [...x.tickers, t] } : x,
           ),
-          tickers: s.tickers[t] ? s.tickers : { ...s.tickers, [t]: emptyTicker() },
+          tickers: s.tickers[t] ? s.tickers : { ...s.tickers, [t]: seedTicker(t) },
         });
         return null;
       },
@@ -432,11 +439,30 @@ export const useAppStore = create<AppState>()(
       storage: createJSONStorage(() => appStorage()),
       // The API key must never touch the SQLite-persisted JSON: it lives
       // in the Keychain and is re-hydrated by hydrateSecureState().
-      // reviewingId is transient UI state.
-      partialize: (s) =>
-        Object.fromEntries(
+      // reviewingId is transient UI state. Bundled snapshots ship with the
+      // app, so they are stripped here and re-attached by merge below.
+      partialize: (s) => {
+        const kept = Object.fromEntries(
           Object.entries(s).filter(([k]) => k !== 'devFmpApiKey' && k !== 'reviewingId'),
-        ) as AppState,
+        ) as AppState;
+        kept.tickers = Object.fromEntries(
+          Object.entries(s.tickers).map(([t, st]) => [
+            t,
+            { ...st, snapshots: stripLibrary(st.snapshots) },
+          ]),
+        );
+        return kept;
+      },
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<AppState>;
+        const tickers = Object.fromEntries(
+          Object.entries(p.tickers ?? current.tickers).map(([t, st]) => [
+            t,
+            { ...st, snapshots: withLibrary(t, st.snapshots ?? []) },
+          ]),
+        );
+        return { ...current, ...p, tickers };
+      },
     },
   ),
 );

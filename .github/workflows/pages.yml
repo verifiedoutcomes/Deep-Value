@@ -1,9 +1,8 @@
 name: Deploy web demo to GitHub Pages
 
 # Builds the real Expo app for the web (react-native-web) and publishes
-# it, plus the interface mockup, to GitHub Pages:
-#   https://verifiedoutcomes.github.io/Deep-Value/          the live app
-#   https://verifiedoutcomes.github.io/Deep-Value/mockup/   design mockup
+# it to GitHub Pages:
+#   https://verifiedoutcomes.github.io/Deep-Value/
 #
 # One-time setup by a repo admin: Settings -> Pages -> Source: "GitHub
 # Actions". After that every push to main redeploys.

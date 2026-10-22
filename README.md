@@ -107,16 +107,39 @@ The real app also runs in a browser via react-native-web, so anyone can
 try it without Expo Go or a Mac:
 
 - **Live app:** https://verifiedoutcomes.github.io/Deep-Value/
-- **Interface mockup:** https://verifiedoutcomes.github.io/Deep-Value/mockup/
 
 `.github/workflows/pages.yml` exports the web bundle and deploys it on
 every push to `main`. One-time setup by a repo admin: **Settings → Pages →
-Source: "GitHub Actions"**. The demo ships the bundled META snapshot; live
-refresh needs a proxy URL or dev key exactly like the phone app, and state
-persists in the browser's localStorage.
+Source: "GitHub Actions"**, then re-run the workflow once from the Actions
+tab. The demo ships the bundled META snapshot; live refresh (the ↻ button
+in the Company banner) needs a proxy URL or dev key exactly like the phone
+app, and state persists in the browser's localStorage.
 
 Local web build: `cd apps/mobile && npx expo export --platform web` (or
 `npx expo start --web` for a dev server).
+
+## In the Claude app (iPhone)
+
+The same app also runs as a private Claude artifact, so it opens on a phone
+inside the Claude app: https://claude.ai/artifact/8u8StfF7JT2zwXk8w5zbWy
+
+The artifact viewer is locked down (no network, no `alert`/`confirm`,
+unknown serving path), so `scripts/build-artifact.mjs` packages a special
+build: one self-contained page with the bundle and icons inlined, no base
+path, in-app dialogs, and fresh snapshots baked in. Live refresh is off in
+that build; everything else (editing, ⓘ cards, saved analyses, checklist)
+works and persists per device.
+
+```bash
+# from the repo root; --fetch pulls fresh snapshots with your FMP key
+DVH_FMP_API_KEY=… node scripts/build-artifact.mjs --fetch
+# → .artifact/deep-value-hunter.html, then publish it to the artifact
+```
+
+`DVH_PRELOAD_TICKERS=META,MSFT,…` changes the bundled names. The snapshots
+stay in `.artifact/` (gitignored) because provider data is licensed to the
+key holder; don't commit them or share the artifact publicly without
+checking your data plan's redistribution terms.
 
 ## App Store
 

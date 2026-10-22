@@ -448,3 +448,77 @@ disagreed, **the file won**; those cases are called out explicitly.
     inputs and all expected outputs programmatically from cached values
     (openpyxl, two passes). Nothing hand-typed; if the gate fails, fix the
     engine — never the fixture.
+
+52. **The app inside the Claude iPhone app (2026-10-22).** A private
+    Claude artifact now runs the real app, not a mockup
+    (https://claude.ai/artifact/8u8StfF7JT2zwXk8w5zbWy). The viewer's
+    frame dictates the build (`scripts/build-artifact.mjs`): only the page
+    itself is guaranteed to load, so the 1.3 MB bundle is inlined and its
+    12 icons become data: URIs; the serving path is unknown, so the export
+    has no base URL (`DVH_WEB_BASE_URL=''` via `app.config.js`), the page
+    boots at "/" and `+not-found` redirects home; network calls are
+    blocked, so the page sets `__DVH_HOST__ = 'claude-artifact'` and the
+    app turns live data off with one clear message instead of failing
+    per request. A plain `#valuation`-style anchor opens that tab. iOS
+    zooms into inputs under 16px, so the boot script caps the viewport
+    scale (pinch-zoom still works). Verified in headless Chromium against
+    an emulation of the viewer: cross-origin sandboxed iframe without
+    allow-modals, strict CSP without eval, deep serving path, iPhone
+    viewport; 10/10 flows pass with zero console errors and zero external
+    requests. The interface mockup is retired: the real app supersedes
+    it, its numbers predated the app-mode corrections, and it displayed a
+    masked suffix of the dev API key.
+
+53. **In-app dialogs on web.** The viewer makes `confirm()` return false
+    without showing anything, so every "are you sure?" would have failed
+    silently. `showAlert` now queues on web and `<DialogHost/>` renders
+    them in-app: a card for one or two short buttons, an action list for
+    more, destructive in red, cancel last, backdrop/Escape cancels. This
+    also fixes the Pages build, where multi-option menus (Move to group …)
+    collapsed to OK/Cancel. Native keeps `Alert.alert`.
+
+54. **Bundled snapshot library.** `window.__DVH_PRELOAD__` snapshots (plus
+    the sheet's META fixture, always) seed the first-run watchlist,
+    answer search offline ("data bundled" hits), and are stripped from
+    persisted state and re-attached on load (`stripLibrary`/`withLibrary`)
+    so localStorage never stores what the bundle already carries. The
+    preview's snapshots come from the owner's FMP key at build time and
+    stay out of git (licensing). META carries both the fresh pull and the
+    sheet's 2026-07-10 snapshot, so the two can be compared by pinning.
+
+55. **Reverse DCF and sensitivity grid (app-only lenses).** "Priced in"
+    solves, holding the rest of the scenario fixed, for the one constant
+    revenue growth rate and the exit EV/EBIT at which fair value equals
+    the price (equivalently intrinsic value = snapshot cap, IRR = discount
+    rate). The multiple is exact (intrinsic value is linear in it); growth
+    is bisected on [−50%, 100%] with explicit out-of-range bounds and an
+    honest blank when the terminal margin is not positive. The grid shows
+    fair value across exit multiple ±4× by discount rate ±2 points, rates
+    shifting the FCF and terminal rates together so the centre equals the
+    headline exactly. Both are tested by plugging the solution back into
+    the real valuation path. Their ⓘ cards are marked "app ·" so they are
+    never mistaken for sheet cells.
+
+56. **Assumption checks, and what live data showed (2026-10-22).** Running
+    the model on 11 fresh snapshots exposed its failure modes:
+    - With AI-era capex, the sheet convention (OCF + |capex| − SBC) seeds
+      META's FCF margin at 87% against a 33% operating margin (MSFT 86% vs
+      47%, AMZN 41% vs 12%). Most of META's sheet-convention upside
+      (+126%) is capex added back: owner earnings give +76%, conventional
+      +45%.
+    - NVDA's seed holds 65% growth for five years at a 48× trimmed-mean
+      exit multiple: +1295%. The reverse DCF says the price implies
+      shrinking revenue at that margin and multiple.
+    - INTC's near-zero operating income makes EV/EBIT ~6,800× and the
+      IRR has no root.
+    `checkAssumptions()` flags each case (FCF margin > 1.25× op margin;
+    any year > 25% growth; exit > 30×; TTM EV/EBIT > 60× or op income
+    ≤ 0) with an optional one-tap fix: owner earnings (conventional when
+    D&A is missing), a linear growth fade to 5% by the final year
+    (`fadeGrowth`; high growth rarely persists per Chan, Karceski &
+    Lakonishok 2003), today's multiple, or the 4-year average margin.
+    Defaults are unchanged: the sheet's seeds and convention stay the
+    user's choice; the flags make their consequences visible. The exit
+    multiple's ⓘ was also corrected: it still described the sheet's
+    current-EV/EBIT seed and bear −3 offset after app mode moved to the
+    trimmed mean and a uniform −2.

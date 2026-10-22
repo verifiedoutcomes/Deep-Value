@@ -8,6 +8,8 @@ export * from './math';
 export * from './historical';
 export * from './header';
 export * from './scenario';
+export * from './implied';
+export * from './checks';
 
 import type {
   CompanySnapshot,
@@ -100,6 +102,9 @@ export interface CompanyAnalysis {
   /** The default 5-year exit multiple used for unedited scenarios. */
   seededExitMultiple5: number;
   scenarios: Record<ScenarioKind, Record<HorizonYears, ScenarioValuation>>;
+  /** The fully-defaulted inputs behind each scenario block (for the
+   *  reverse-DCF and sensitivity lenses, which re-run them). */
+  scenarioInputs: Record<ScenarioKind, Record<HorizonYears, ScenarioInputs>>;
   irrStrip: IrrStripCell[];
   marginOfSafety: MarginOfSafetyRow[];
   verdict: VerdictCard;
@@ -170,10 +175,13 @@ export function analyzeCompany(
   const kinds: ScenarioKind[] = ['bear', 'base', 'bull'];
   const horizons: HorizonYears[] = [5, 3];
   const scenarios = {} as Record<ScenarioKind, Record<HorizonYears, ScenarioValuation>>;
+  const scenarioInputs = {} as Record<ScenarioKind, Record<HorizonYears, ScenarioInputs>>;
   for (const kind of kinds) {
     scenarios[kind] = {} as Record<HorizonYears, ScenarioValuation>;
+    scenarioInputs[kind] = {} as Record<HorizonYears, ScenarioInputs>;
     for (const horizon of horizons) {
       const inputs = buildScenarioInputs(derived, kind, horizon, overrides, seededExit5, options);
+      scenarioInputs[kind][horizon] = inputs;
       scenarios[kind][horizon] = computeScenarioValuation(anchors, inputs);
     }
   }
@@ -186,6 +194,7 @@ export function analyzeCompany(
     anchors,
     seededExitMultiple5: seededExit5,
     scenarios,
+    scenarioInputs,
     irrStrip: computeIrrStrip(anchors, base5),
     marginOfSafety: computeMarginOfSafety(
       base5.status === 'ok' ? base5.fairValuePerShare : null,

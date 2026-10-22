@@ -15,14 +15,18 @@ export function Mono({
   size = 'md',
   color = colors.text,
   bold = false,
+  lines,
 }: {
   children: React.ReactNode;
   size?: keyof typeof type.size;
   color?: string;
   bold?: boolean;
+  /** Truncate with an ellipsis after this many lines. */
+  lines?: number;
 }) {
   return (
     <Text
+      numberOfLines={lines}
       style={{
         fontFamily: type.mono,
         fontSize: type.size[size],
@@ -77,17 +81,40 @@ export function Chip({
   );
 }
 
-export function Banner({ children, tone = 'info' }: { children: React.ReactNode; tone?: 'info' | 'warn' }) {
+export function Banner({
+  children,
+  tone = 'info',
+  action,
+}: {
+  children: React.ReactNode;
+  tone?: 'info' | 'warn';
+  /** Optional tappable action at the right edge (e.g. refresh on web). */
+  action?: { label: string; onPress: () => void; disabled?: boolean };
+}) {
   return (
     <View
       style={[
         styles.banner,
         { borderColor: tone === 'warn' ? colors.amber : colors.blueDim },
+        action && styles.bannerWithAction,
       ]}
     >
-      <Text style={{ color: colors.textDim, fontSize: type.size.sm, fontFamily: type.mono }}>
+      <Text
+        style={{ color: colors.textDim, fontSize: type.size.sm, fontFamily: type.mono, flex: 1 }}
+      >
         {children}
       </Text>
+      {action && (
+        <Pressable
+          onPress={action.onPress}
+          disabled={action.disabled}
+          hitSlop={8}
+          accessibilityRole="button"
+          style={[styles.bannerAction, action.disabled && { opacity: 0.5 }]}
+        >
+          <Mono size="sm" color={colors.accent} bold>{action.label}</Mono>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -123,6 +150,14 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     marginRight: space.xs,
     backgroundColor: colors.chipBg,
+  },
+  bannerWithAction: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  bannerAction: {
+    borderColor: colors.accentDim,
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: space.sm,
+    paddingVertical: 4,
   },
   banner: {
     borderWidth: 1,

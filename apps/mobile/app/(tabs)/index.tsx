@@ -26,6 +26,8 @@ import { colors, space, type } from '../../src/theme';
 import { Chip, Mono } from '../../src/components/ui';
 import { pct, price, ratio } from '../../src/format';
 import { tapHaptic, warningHaptic } from '../../src/haptics';
+import { NETWORK_BLOCKED } from '../../src/host';
+import { LIBRARY_TICKERS } from '../../src/library';
 
 const ROW_HEIGHT = 56;
 const DELETE_W = 84;
@@ -76,7 +78,13 @@ function SwipeableRow({
 
   return (
     <View style={{ height: ROW_HEIGHT }}>
-      <View style={swipeStyles.deleteUnder}>
+      {/* hidden at rest: sub-pixel gaps would otherwise show a red hairline */}
+      <Animated.View
+        style={[
+          swipeStyles.deleteUnder,
+          { opacity: tx.interpolate({ inputRange: [-1, 0], outputRange: [1, 0], extrapolate: 'clamp' }) },
+        ]}
+      >
         <Pressable
           style={swipeStyles.deleteBtn}
           onPress={() => {
@@ -89,7 +97,7 @@ function SwipeableRow({
         >
           <Mono size="sm" color={colors.text} bold>Remove</Mono>
         </Pressable>
-      </View>
+      </Animated.View>
       <Animated.View
         style={{ transform: [{ translateX: tx }], backgroundColor: colors.bg }}
         {...pan.panHandlers}
@@ -173,7 +181,7 @@ function WatchRow({ ticker }: { ticker: string }) {
     >
       <View style={{ flex: 1.2 }}>
         <Mono bold>{ticker}</Mono>
-        <Mono size="xs" color={colors.textFaint}>
+        <Mono size="xs" color={colors.textFaint} lines={1}>
           {snapshot?.name ?? 'no data'}
         </Mono>
       </View>
@@ -268,12 +276,20 @@ export default function WatchlistScreen() {
   };
 
   const q = normalizeTicker(query);
+  const tickerStates = useAppStore((s) => s.tickers);
   const visible = useMemo(() => {
-    const filtered = q ? tickers.filter((t) => t.includes(q)) : [...tickers];
+    // match the ticker or the company name ("nike" finds NKE)
+    const filtered = q
+      ? tickers.filter(
+          (t) =>
+            t.includes(q) ||
+            (activeSnapshot(tickerStates[t])?.name.toUpperCase().includes(q) ?? false),
+        )
+      : [...tickers];
     if (sort === 'az') filtered.sort();
     return filtered;
-  }, [tickers, q, sort]);
-  const newResults = (search.data ?? []).filter((r) => !allTickers.has(r.ticker)).slice(0, 5);
+  }, [tickers, tickerStates, q, sort]);
+  const newResults = search.data.filter((r) => !allTickers.has(r.ticker)).slice(0, 5);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -387,10 +403,26 @@ export default function WatchlistScreen() {
           )}
           {newResults.map((r) => (
             <Pressable key={r.ticker} style={styles.resultRow} onPress={() => tryAdd(r.ticker)}>
-              <Mono size="sm">+ {r.ticker}</Mono>
-              <Mono size="xs" color={colors.textFaint}>{r.exchange}</Mono>
+              <View style={{ flex: 1, paddingRight: space.sm }}>
+                <Mono size="sm">+ {r.ticker}</Mono>
+                {r.name ? (
+                  <Mono size="xs" color={colors.textFaint}>{r.name}</Mono>
+                ) : null}
+              </View>
+              <Mono size="xs" color={r.bundled ? colors.accent : colors.textFaint}>
+                {r.bundled ? 'data bundled' : r.exchange}
+              </Mono>
             </Pressable>
           ))}
+          {!search.live && (
+            <View style={styles.resultRow}>
+              <Mono size="xs" color={colors.textFaint}>
+                {NETWORK_BLOCKED
+                  ? `Live search is off in the Claude preview. Bundled: ${LIBRARY_TICKERS.join(', ')}.`
+                  : 'Live search needs the data proxy or a dev API key (Settings).'}
+              </Mono>
+            </View>
+          )}
           {!allTickers.has(q) && /^[A-Z.\-]{1,10}$/.test(q) && (
             <Pressable style={styles.resultRow} onPress={addManual}>
               <Mono size="sm" color={colors.accent}>

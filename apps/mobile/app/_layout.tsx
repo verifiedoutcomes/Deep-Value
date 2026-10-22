@@ -2,8 +2,12 @@ import React from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { colors } from '../src/theme';
+import { colors, type } from '../src/theme';
 import { hydrateSecureState } from '../src/store';
+import { DialogHost } from '../src/components/DialogHost';
+import { installWebStyles } from '../src/webStyles';
+
+installWebStyles();
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1 } },
@@ -19,8 +23,9 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: colors.bg },
+          headerShadowVisible: false,
           headerTintColor: colors.text,
-          headerTitleStyle: { fontFamily: 'Menlo' },
+          headerTitleStyle: { fontFamily: type.mono },
           contentStyle: { backgroundColor: colors.bg },
         }}
       >
@@ -36,6 +41,7 @@ export default function RootLayout() {
           options={{ presentation: 'modal', title: 'Data Parity (dev)' }}
         />
       </Stack>
+      <DialogHost />
     </QueryClientProvider>
   );
 }

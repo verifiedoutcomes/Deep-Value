@@ -23,10 +23,26 @@ export function appStorage(): StateStorage {
     const probe = '__dvh_probe__'; // some browsers throw on access in private mode
     localStorage.setItem(probe, '1');
     localStorage.removeItem(probe);
+    // A write over the ~5MB quota (many saved analyses) keeps the latest
+    // state in memory for the session instead of throwing mid-update.
     return {
-      getItem: (k) => localStorage.getItem(k),
-      setItem: (k, v) => localStorage.setItem(k, v),
-      removeItem: (k) => localStorage.removeItem(k),
+      getItem: (k) => memory.get(k) ?? localStorage.getItem(k),
+      setItem: (k, v) => {
+        try {
+          localStorage.setItem(k, v);
+          memory.delete(k);
+        } catch {
+          memory.set(k, v);
+        }
+      },
+      removeItem: (k) => {
+        memory.delete(k);
+        try {
+          localStorage.removeItem(k);
+        } catch {
+          // storage revoked mid-session: nothing left to remove
+        }
+      },
     };
   } catch {
     return memoryStorage;
