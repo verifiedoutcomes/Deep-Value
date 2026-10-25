@@ -118,11 +118,11 @@ export function forecastRevenueFormula(
 
 /** One line on how historical Adj FCF is defined under each treatment. */
 export function capexTreatmentNote(t: CapexTreatment): string {
-  return t === 'conventional'
-    ? 'Historical Adj FCF = OCF − |capex| − SBC (conventional: all capex is a cost).'
-    : t === 'owner'
-      ? 'Historical Adj FCF = OCF − D&A − SBC (owner earnings: D&A stands in for maintenance capex).'
-      : 'Historical Adj FCF = OCF + |capex| − SBC (sheet convention: capex stored negative, so it adds back).';
+  return t === 'owner'
+    ? 'Historical Adj FCF = OCF − D&A − SBC (owner earnings: D&A stands in for maintenance capex).'
+    : t === 'sheet'
+      ? 'Saved under the old sheet convention, OCF + |capex| − SBC: a capex sign error, since corrected.'
+      : 'Historical Adj FCF = OCF − |capex| − SBC (capex and stock-based pay are both costs).';
 }
 
 export function adjFcfMarginFormula(
@@ -130,7 +130,7 @@ export function adjFcfMarginFormula(
   rev: number,
   margin: number,
   fcf: number,
-  treatment: CapexTreatment = 'sheet',
+  treatment: CapexTreatment = 'conventional',
 ): FormulaSpec {
   return {
     title: `${year} Adj FCF`,
@@ -299,7 +299,7 @@ export function headerFormulas(vals: {
       cell: 'E12',
       formula: 'TTM Adj FCF ÷ snapshot market cap',
       steps: [`= ${m(v.adjFcf)} ÷ ${m(v.snapshotMarketCap)}`],
-      note: 'Adj FCF = OCF + |capex| − SBC (sheet convention: capex arrives negative).',
+      note: 'Adj FCF = OCF − |capex| − SBC (capex arrives negative; the absolute value makes the sign irrelevant).',
     },
     adjRoic: {
       title: 'Adj ROIC',

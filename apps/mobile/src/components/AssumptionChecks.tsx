@@ -15,7 +15,6 @@ import { tapHaptic } from '../haptics';
 export interface CheckActions {
   fadeGrowth: () => void;
   useMultiple: (m: number) => void;
-  useOwnerEarnings: () => void;
   useConventional: () => void;
   useOpMargin: (m: number) => void;
 }
@@ -26,12 +25,7 @@ interface Line {
   action?: { label: string; run: () => void };
 }
 
-function describe(
-  f: AssumptionFlag,
-  finalYear: number,
-  ownerAvailable: boolean,
-  act: CheckActions,
-): Line {
+function describe(f: AssumptionFlag, finalYear: number, act: CheckActions): Line {
   switch (f.kind) {
     case 'fcf-above-op':
       return {
@@ -40,13 +34,13 @@ function describe(
           `Adj FCF margin ${pct(f.fcfMargin)} vs operating margin ${pct(f.opMargin)}: ` +
           `${(f.fcfMargin / f.opMargin).toFixed(1)}× operating income. ` +
           (f.treatment === 'sheet'
-            ? 'The sheet convention adds capex back (OCF + |capex| − SBC), which inflates FCF most for the heaviest investors.'
-            : 'Check the TTM cash flow for one-off working-capital inflows.'),
+            ? 'This analysis was saved under the old sheet convention, which added capex back.'
+            : f.treatment === 'owner'
+              ? 'Owner earnings subtracts D&A, not capex; with heavy investment the standard definition is stricter.'
+              : 'Check the TTM cash flow for one-off working-capital inflows or asset-sale proceeds.'),
         action:
-          f.treatment === 'sheet'
-            ? ownerAvailable
-              ? { label: 'use owner earnings', run: act.useOwnerEarnings }
-              : { label: 'use conventional FCF', run: act.useConventional }
+          f.treatment === 'owner'
+            ? { label: 'use standard FCF', run: act.useConventional }
             : undefined,
       };
     case 'high-growth':
@@ -93,13 +87,11 @@ function describe(
 export function AssumptionChecks({
   flags,
   finalYear,
-  ownerAvailable,
   readOnly,
   actions,
 }: {
   flags: AssumptionFlag[];
   finalYear: number;
-  ownerAvailable: boolean;
   readOnly: boolean;
   actions: CheckActions;
 }) {
@@ -114,7 +106,7 @@ export function AssumptionChecks({
     <Card style={styles.card}>
       <SectionTitle>Assumption check · {flags.length}</SectionTitle>
       {flags.map((f) => {
-        const line = describe(f, finalYear, ownerAvailable, actions);
+        const line = describe(f, finalYear, actions);
         return (
           <View key={f.kind} style={styles.line}>
             <Mono size="sm" color={colors.amber} bold>! {line.title}</Mono>

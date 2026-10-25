@@ -97,9 +97,10 @@ Company (summary card, ownership strip, price chart, scrollable historical
 table with sparklines), Valuation (scenario editor, fair value/IRR,
 IRR-at-price strip, margin of safety, verdict), Checklist.
 
-Note the "Capex treatment" setting: the default replicates the sheet
-(`Adj FCF = OCF + |capex| − SBC`, because capex is stored negative). See
-DECISIONS.md §1 before changing it.
+Adjusted FCF is `OCF − |capex| − SBC` everywhere in the app. The original
+sheet's `K = H − I − J` added capex back, because capex is stored negative;
+that sign error is corrected (DECISIONS.md §57). The ⓘ beside the Adj FCF
+note also offers owner earnings (`OCF − D&A − SBC`).
 
 ## Web demo (GitHub Pages)
 

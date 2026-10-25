@@ -12,7 +12,7 @@ import { adjFcf } from './historical';
 
 export function computeHeaderMetrics(
   snapshot: CompanySnapshot,
-  treatment: CapexTreatment = 'sheet',
+  treatment: CapexTreatment = 'conventional',
 ): HeaderMetrics {
   const ttm = snapshot.rows[snapshot.rows.length - 1];
   if (!ttm || ttm.yearLabel !== 'TTM') {

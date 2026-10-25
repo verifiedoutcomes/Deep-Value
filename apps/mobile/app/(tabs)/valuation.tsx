@@ -185,12 +185,10 @@ export default function ValuationScreen() {
       horizon === 5
         ? patch({ exitMultiple5: { ...overrides.exitMultiple5, [kind]: m } })
         : patch({ exitMultiple3: { ...overrides.exitMultiple3, [kind]: m } }),
-    useOwnerEarnings: () => setCapexTreatment('owner'),
     useConventional: () => setCapexTreatment('conventional'),
     useOpMargin: (m: number) =>
       setYearsAll(lenses.inputs.years.map((y) => ({ ...y, operatingMargin: m }))),
   };
-  const ownerAvailable = snapshot.rows[snapshot.rows.length - 1]?.depreciationAmortization != null;
 
   return (
     <FormulaProvider>
@@ -246,7 +244,6 @@ export default function ValuationScreen() {
       <AssumptionChecks
         flags={lenses.flags}
         finalYear={finalYear}
-        ownerAvailable={ownerAvailable}
         readOnly={readOnly}
         actions={checkActions}
       />

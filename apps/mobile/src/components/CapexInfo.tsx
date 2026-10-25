@@ -1,8 +1,9 @@
 /**
- * Capex-treatment ⓘ bubble: lives next to the "Adj FCF = OCF + |capex| −
+ * Capex-treatment ⓘ bubble: lives next to the "Adj FCF = OCF − |capex| −
  * SBC" note wherever it appears, and holds BOTH the explanation and the
  * toggle (moved here from Settings so the choice sits where the
- * convention is actually used).
+ * convention is actually used). Two correct definitions only; the
+ * sheet's capex add-back is no longer offered.
  */
 import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
@@ -31,10 +32,10 @@ export function CapexInfoTag({ compact = false }: { compact?: boolean }) {
         {!compact && (
           <Mono size="xs" color={colors.textFaint}>
             Adj FCF ={' '}
-            {capexTreatment === 'sheet'
-              ? 'OCF + |capex| − SBC'
-              : capexTreatment === 'owner'
-                ? 'OCF − D&A − SBC (owner)'
+            {capexTreatment === 'owner'
+              ? 'OCF − D&A − SBC (owner)'
+              : capexTreatment === 'sheet'
+                ? 'OCF + |capex| − SBC (old sheet)'
                 : 'OCF − |capex| − SBC'}{' '}
           </Mono>
         )}
@@ -46,20 +47,12 @@ export function CapexInfoTag({ compact = false }: { compact?: boolean }) {
             <View style={styles.head}>
               <Mono size="md" bold>Capex treatment</Mono>
               <View style={styles.cellRef}>
-                <Mono size="xs" color={colors.amber}>sheet K column</Mono>
+                <Mono size="xs" color={colors.amber}>sheet K · corrected</Mono>
               </View>
             </View>
             <View style={{ flexDirection: 'row', marginBottom: space.sm, flexWrap: 'wrap', gap: 4 }}>
               <Chip
-                label="Sheet: OCF + |capex| − SBC"
-                active={capexTreatment === 'sheet'}
-                onPress={() => {
-                  toggleHaptic();
-                  setCapexTreatment('sheet');
-                }}
-              />
-              <Chip
-                label="OCF − |capex| − SBC"
+                label="Standard: OCF − |capex| − SBC"
                 active={capexTreatment === 'conventional'}
                 onPress={() => {
                   toggleHaptic();
@@ -76,14 +69,23 @@ export function CapexInfoTag({ compact = false }: { compact?: boolean }) {
               />
             </View>
             <Mono size="xs" color={colors.textDim}>
-              Sheet (default): capex is stored NEGATIVE and Adjusted FCF = OCF − capex − SBC,
-              which ADDS capex back — every dollar of capex is treated as growth investment.
-              Conventional: subtracts capex — every dollar is a cost. Owner earnings (Buffett):
-              subtracts only depreciation & amortization as the proxy for the maintenance capex
-              needed to defend today's earnings power — the middle path. Owner earnings needs
-              D&A, which live pulls supply; the bundled sample snapshot has none, so it shows
-              dashes there. Changing this reprices everything downstream — margins, yields,
-              forecasts, fair values and IRRs.
+              Standard (default): Adjusted FCF = operating cash flow − |capex| − stock-based
+              compensation. Capex is a cash cost; the absolute value makes it right whichever
+              sign the data provider uses (capex arrives negative). SBC is subtracted because
+              paying staff in shares dilutes you as surely as paying cash.
+            </Mono>
+            <View style={{ height: space.sm }} />
+            <Mono size="xs" color={colors.textDim}>
+              Owner earnings (Buffett): subtracts depreciation & amortization instead of capex,
+              as a proxy for the maintenance spend needed to defend today's earnings. Useful in
+              heavy build-out years, but generous: D&A lags a young asset base. It needs D&A,
+              which the sheet's 2026-07-10 META snapshot lacks (it shows dashes there).
+            </Mono>
+            <View style={{ height: space.sm }} />
+            <Mono size="xs" color={colors.textFaint}>
+              The original sheet computed K = OCF − capex − SBC with capex stored negative,
+              which added capex back. That sign error is corrected everywhere in the app;
+              analyses saved before the fix still replay their original numbers.
             </Mono>
             <Pressable style={styles.close} onPress={() => setOpen(false)}>
               <Mono size="sm" color={colors.textDim}>close</Mono>

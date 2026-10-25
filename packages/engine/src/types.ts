@@ -63,7 +63,7 @@ export interface HistoricalRowInput {
 export interface DerivedRow {
   revenueYoY: Maybe; // E = D / prior D - 1 (TTM row compares vs prior full FY)
   operatingMargin: Maybe; // G = F / D
-  adjFcf: Maybe; // K = H - I - J  (capex negative => OCF + |capex| - SBC)
+  adjFcf: Maybe; // K, corrected: OCF − |capex| − SBC (sheet's H − I − J added capex back)
   adjFcfMargin: Maybe; // L = K / D
   netDebtToEbit: Maybe; // N = M / F
   enterpriseValue: Maybe; // Q (input for FY rows, P+M for TTM)

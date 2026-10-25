@@ -34,6 +34,11 @@ export function AnalysisBar({ reviewing }: { reviewing: SavedAnalysis | null }) 
           <Mono size="xs" color={colors.textDim}>
             original results, read-only — edits are disabled
           </Mono>
+          {reviewing.capexTreatment === 'sheet' && (
+            <Mono size="xs" color={colors.amber}>
+              saved before the capex fix: Adj FCF added capex back
+            </Mono>
+          )}
         </View>
         <Pressable
           onPress={() => {

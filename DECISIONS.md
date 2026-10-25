@@ -7,7 +7,9 @@ disagreed, **the file won**; those cases are called out explicitly.
 
 ## Model semantics
 
-1. **Capex sign convention (kept, not fixed).** The data layer delivers
+1. **Capex sign convention — superseded by §57 (2026-10-25): the app now
+   always subtracts |capex|; 'sheet' survives only for the parity gate.**
+   Original decision (kept, not fixed): The data layer delivers
    capex as a negative number (I34:I53) and Adjusted FCF is `K = H − I − J`,
    i.e. OCF **plus** |capex| minus SBC. META TTM Adj FCF = 165,064,000,000
    and every valuation number downstream depends on it. The engine
@@ -522,3 +524,24 @@ disagreed, **the file won**; those cases are called out explicitly.
     multiple's ⓘ was also corrected: it still described the sheet's
     current-EV/EBIT seed and bear −3 offset after app mode moved to the
     trimmed mean and a uniform −2.
+
+57. **Capex sign error corrected everywhere (2026-10-25, owner decision).**
+    The sheet's `K = H − I − J` subtracts capex that the data layer stores
+    as a negative number, so it added capex back (META: an 87% FCF margin
+    against a 33% operating margin). Adjusted FCF is now
+    `OCF − |capex| − SBC` by default in the engine and the only standard
+    definition in the app; ABS makes it correct whichever sign a provider
+    uses (FMP and EDGAR both arrive negative here; a test flips every
+    capex sign and gets identical fair values). Owner earnings
+    (`OCF − D&A − SBC`) remains as the one alternative. The sheet's
+    formula survives only as the `'sheet'` treatment that the META gate
+    passes explicitly, so the gate still proves every other formula
+    matches the spreadsheet. Persisted state migrates (store v4) from
+    'sheet' to the corrected default; saved analyses keep the treatment
+    they were frozen with, and their review banner says they predate the
+    fix. SBC is unchanged and correct: it arrives positive (the cash-flow
+    statement adds it back as non-cash) and every treatment subtracts it
+    as a real cost of paying staff in shares; fair value scales by today's
+    share count and projects no separate dilution, so it is not
+    double-counted. To fix the Google Sheet itself: K34 =
+    `H34-ABS(I34)-J34`, filled down to K53.

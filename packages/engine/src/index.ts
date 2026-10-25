@@ -150,7 +150,9 @@ export function buildScenarioInputs(
 export function analyzeCompany(
   snapshot: CompanySnapshot,
   overrides: ScenarioOverrides = {},
-  treatment: CapexTreatment = 'sheet',
+  /** 'conventional' (OCF − |capex| − SBC) unless asked otherwise; the
+   *  META gate passes 'sheet' to replicate the spreadsheet exactly. */
+  treatment: CapexTreatment = 'conventional',
   options: AnalyzeOptions = {},
 ): CompanyAnalysis {
   const derived = computeDerivedRows(snapshot.rows, treatment);

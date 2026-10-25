@@ -6,24 +6,27 @@ import type { DerivedRow, HistoricalRowInput, Maybe, SummaryStats } from './type
 import { average, cagr, safeDiv, safeSub, trimmeanExcel } from './math';
 
 /**
- * Adjusted FCF, K = H - I - J (I34:I53 store capex as a NEGATIVE number, so
- * this is OCF + |capex| - SBC). This is the sheet's convention and the
- * default; DO NOT silently "fix" the sign. Two alternatives sit behind an
- * explicit setting:
- *  - 'conventional': OCF - |capex| - SBC (all capex is a cost);
- *  - 'owner':        OCF - D&A - SBC — Buffett's owner earnings with
+ * Adjusted FCF. Capex is a cost and SBC is a cost:
+ *  - 'conventional' (default): OCF − |capex| − SBC. ABS makes it correct
+ *                    whatever sign the provider uses (FMP and EDGAR both
+ *                    arrive negative here).
+ *  - 'owner':        OCF − D&A − SBC — Buffett's owner earnings with
  *                    depreciation & amortization as the maintenance-capex
- *                    proxy (only the spend needed to DEFEND current
- *                    earnings power is a cost; growth capex is a choice).
- *                    Null when the snapshot carries no D&A.
+ *                    proxy. Null when the snapshot carries no D&A.
+ *  - 'sheet':        PARITY ONLY. The sheet's K = H − I − J with capex
+ *                    stored negative, which ADDS capex back (a sign
+ *                    error). Kept solely so the META gate can prove every
+ *                    other formula matches the spreadsheet; never shown.
+ * SBC arrives positive (the cash-flow statement adds it back as non-cash),
+ * and every treatment subtracts it: paying staff in shares is a real cost.
  */
-export type CapexTreatment = 'sheet' | 'conventional' | 'owner';
+export type CapexTreatment = 'conventional' | 'owner' | 'sheet';
 
 export function adjFcf(
   ocf: Maybe,
   capex: Maybe,
   sbc: Maybe,
-  treatment: CapexTreatment = 'sheet',
+  treatment: CapexTreatment = 'conventional',
   depreciationAmortization: Maybe = null,
 ): Maybe {
   if (treatment === 'conventional') {
@@ -54,7 +57,7 @@ export function rowEnterpriseValue(row: HistoricalRowInput): Maybe {
  */
 export function computeDerivedRows(
   rows: HistoricalRowInput[],
-  treatment: CapexTreatment = 'sheet',
+  treatment: CapexTreatment = 'conventional',
 ): DerivedRow[] {
   const n = rows.length;
   return rows.map((row, i) => {

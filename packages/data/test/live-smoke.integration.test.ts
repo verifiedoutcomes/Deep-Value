@@ -48,9 +48,9 @@ describe.skipIf(!enabled)(`live smoke: ${ticker} end-to-end`, () => {
       const dTtm = analysis.derived[n - 1]!;
 
       // --- sheet identities on live data ---
-      // K53 = H53 - I53 - J53 (capex negative)
+      // Adj FCF = OCF − |capex| − SBC (corrected sign; capex arrives negative)
       expect(dTtm.adjFcf).toBeCloseTo(
-        ttm.operatingCashFlow! - ttm.capex! - ttm.sbc!,
+        ttm.operatingCashFlow! - Math.abs(ttm.capex!) - ttm.sbc!,
         2,
       );
       // Q53 = P53 + M53

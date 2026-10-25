@@ -56,7 +56,9 @@ function expectClose(
   }
 }
 
-const analysis = analyzeCompany(fixture);
+// The gate replicates the spreadsheet exactly, including its capex sign
+// error ('sheet'); the app itself always uses OCF − |capex| − SBC.
+const analysis = analyzeCompany(fixture, {}, 'sheet');
 const S = expected.scalars;
 
 describe('META gate: snapshot integrity', () => {
@@ -315,8 +317,8 @@ describe('engine primitives', () => {
     const m = momentumFromHistory(fixture.priceHistory, fixture.priceHistory.at(-1)!.date);
     expect(m).not.toBeNull();
   });
-  it('capex treatment toggle: conventional differs from sheet default', () => {
-    const conventional = computeDerivedRows(fixture.rows, 'conventional');
+  it('corrected capex treatment (the default) subtracts |capex|', () => {
+    const conventional = computeDerivedRows(fixture.rows);
     const ttm = conventional[conventional.length - 1]!;
     // OCF - |capex| - SBC = 115800 - 69691 - 20427 (millions)
     expectClose(ttm.adjFcf, 25682000000, ARITH_TOL, 'conventional TTM FCF');

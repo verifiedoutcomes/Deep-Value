@@ -12,7 +12,7 @@ import { analyzeCompany, computeDerivedRows, type CompanySnapshot } from '../src
 const fixture = fixtureJson as unknown as CompanySnapshot;
 
 describe('corrected 3-year terminal discounting (app mode)', () => {
-  const parity = analyzeCompany(fixture);
+  const parity = analyzeCompany(fixture, {}, 'sheet');
   const corrected = analyzeCompany(fixture, {}, 'sheet', { correct3yTerminal: true });
 
   it('sheet-parity default matches the fixture (nper = 5)', () => {
@@ -85,14 +85,14 @@ describe('bear/bull seeded from base (app mode)', () => {
   });
 
   it('sheet default remains No Forecast (gate unchanged)', () => {
-    const parity = analyzeCompany(fixture);
+    const parity = analyzeCompany(fixture, {}, 'sheet');
     expect(parity.scenarios.bear[5].status).toBe('no-forecast');
     expect(parity.scenarios.bull[5].status).toBe('no-forecast');
   });
 });
 
 describe('soundest-logic flags (app mode)', () => {
-  const parity = analyzeCompany(fixture);
+  const parity = analyzeCompany(fixture, {}, 'sheet');
 
   it('correctedSummaryStats anchors CAGRs to the LATEST fiscal year', () => {
     const c = analyzeCompany(fixture, {}, 'sheet', { correctedSummaryStats: true });
@@ -186,5 +186,27 @@ describe("owner-earnings capex treatment (OCF − D&A − SBC)", () => {
     // computes from the terminal value alone rather than saying No Forecast.
     expect(a.header.adjFcfYield).toBeNull();
     expect(['ok', 'no-forecast']).toContain(a.scenarios.base[5].status);
+  });
+});
+
+describe('default capex treatment: OCF − |capex| − SBC', () => {
+  const a = analyzeCompany(fixture);
+  const n = fixture.rows.length;
+  const ttm = fixture.rows[n - 1]!;
+
+  it('subtracts capex and SBC from OCF', () => {
+    expect(a.derived[n - 1]!.adjFcf!).toBeCloseTo(
+      ttm.operatingCashFlow! - Math.abs(ttm.capex!) - ttm.sbc!,
+      0,
+    );
+    expect(a.derived[n - 1]!.adjFcf!).toBeLessThan(ttm.operatingCashFlow! - ttm.sbc!);
+  });
+
+  it('gives identical results whichever sign the provider uses for capex', () => {
+    const flipped = structuredClone(fixture);
+    for (const r of flipped.rows) if (r.capex != null) r.capex = -r.capex;
+    const b = analyzeCompany(flipped);
+    expect(b.derived[n - 1]!.adjFcf!).toBeCloseTo(a.derived[n - 1]!.adjFcf!, 6);
+    expect(b.scenarios.base[5].intrinsicValue!).toBeCloseTo(a.scenarios.base[5].intrinsicValue!, 0);
   });
 });

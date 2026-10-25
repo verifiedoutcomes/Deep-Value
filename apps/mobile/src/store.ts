@@ -195,7 +195,7 @@ export const useAppStore = create<AppState>()(
       activeGroup: 'Main',
       tickers: Object.fromEntries(LIBRARY_TICKERS.map((t) => [t, seedTicker(t)])),
       selectedTicker: 'META',
-      capexTreatment: 'sheet',
+      capexTreatment: 'conventional',
       proxyBaseUrl: '',
       devFmpApiKey: '',
       devMode: false,
@@ -406,7 +406,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'dvh-state-v1',
-      version: 3,
+      version: 4,
       migrate: (persisted, version) => {
         const state = persisted as AppState & { watchlist?: string[] };
         if (version < 2) {
@@ -433,6 +433,12 @@ export const useAppStore = create<AppState>()(
           state.watchlistGroups = groups.length ? groups : [{ name: 'Main', tickers: [] }];
           state.activeGroup = state.watchlistGroups[0]!.name;
           delete state.watchlist;
+        }
+        if (version < 4 && (state.capexTreatment as string) === 'sheet') {
+          // v3 defaulted to the sheet's capex sign error (OCF + |capex| −
+          // SBC); everyone moves to the corrected OCF − |capex| − SBC.
+          // Saved analyses keep their original treatment, as frozen.
+          state.capexTreatment = 'conventional';
         }
         return state;
       },
