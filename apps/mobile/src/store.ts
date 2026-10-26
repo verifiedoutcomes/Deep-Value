@@ -116,6 +116,9 @@ interface AppState {
    * reinstall does NOT mint a fresh quota.
    */
   installId: string;
+  /** Bundled tickers already offered once, so new ones (added to a later
+   *  build) join the watchlist while removed ones never come back. */
+  seenLibrary: string[];
   /** Last successful live pull per ticker (ms epoch) — freshness gate. */
   lastFetchAt: Record<string, number>;
   markFetched: (ticker: string) => void;
@@ -203,6 +206,7 @@ export const useAppStore = create<AppState>()(
       reviewingId: null,
       installId: '',
       lastFetchAt: {},
+      seenLibrary: LIBRARY_TICKERS,
       quotaRemaining: null,
       markFetched: (ticker) =>
         set((s) => ({ lastFetchAt: { ...s.lastFetchAt, [ticker]: Date.now() } })),
@@ -460,14 +464,39 @@ export const useAppStore = create<AppState>()(
         return kept;
       },
       merge: (persisted, current) => {
-        const p = (persisted ?? {}) as Partial<AppState>;
-        const tickers = Object.fromEntries(
+        // first run: nothing saved, and the initial state already has
+        // every bundled name
+        if (persisted == null) return current;
+        const p = persisted as Partial<AppState>;
+        const tickers: Record<string, TickerState> = Object.fromEntries(
           Object.entries(p.tickers ?? current.tickers).map(([t, st]) => [
             t,
             { ...st, snapshots: withLibrary(t, st.snapshots ?? []) },
           ]),
         );
-        return { ...current, ...p, tickers };
+        // Names bundled since this device last opened the app join the
+        // first group with room. "Seen" also counts any ticker with state,
+        // so a bundled name the user removed stays removed.
+        const seen = new Set([...(p.seenLibrary ?? []), ...Object.keys(p.tickers ?? {})]);
+        const fresh = LIBRARY_TICKERS.filter((t) => !seen.has(t));
+        let watchlistGroups = p.watchlistGroups ?? current.watchlistGroups;
+        const listed = new Set(watchlistGroups.flatMap((g) => g.tickers));
+        for (const t of fresh) {
+          if (listed.has(t)) continue;
+          const room = watchlistGroups.find((g) => g.tickers.length < MAX_GROUP_SIZE);
+          if (!room) break;
+          watchlistGroups = watchlistGroups.map((g) =>
+            g === room ? { ...g, tickers: [...g.tickers, t] } : g,
+          );
+          tickers[t] = seedTicker(t);
+        }
+        return {
+          ...current,
+          ...p,
+          tickers,
+          watchlistGroups,
+          seenLibrary: [...new Set([...seen, ...LIBRARY_TICKERS])],
+        };
       },
     },
   ),

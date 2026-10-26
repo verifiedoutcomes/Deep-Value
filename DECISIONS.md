@@ -545,3 +545,24 @@ disagreed, **the file won**; those cases are called out explicitly.
     share count and projects no separate dilution, so it is not
     double-counted. To fix the Google Sheet itself: K34 =
     `H34-ABS(I34)-J34`, filled down to K53.
+
+58. **EDGAR TTM from 10-Qs; new bundled names reach existing users
+    (2026-10-26).** Adding Vertiv (VRT) exposed two gaps. The FMP dev
+    plan refuses VRT (and VST) on every endpoint but /profile, so the
+    snapshots were assembled EDGAR-first: statements from SEC XBRL,
+    price and market cap from FMP /profile, weekly closes for the
+    fiscal-year-end market caps from a public chart feed (a one-off for
+    the private preview, not committed). That showed the EDGAR provider's
+    "TTM" was just the last 10-K, nine months stale for VRT. It now rolls
+    forward properly: every flow item = latest FY + this year's YTD − the
+    same YTD a year earlier (10-Qs carry the comparative), balance sheet
+    from the latest instant, prior-TTM revenue for the true Y/Y, falling
+    back to the fiscal year when no 10-Q exists; fiscal years that ended
+    earlier this calendar year (MSFT's June) are no longer skipped.
+    Synthetic-facts tests pin both paths. Second gap: bundled names
+    added in a later build never reached a returning user's watchlist.
+    The store now remembers which bundled names it has offered
+    (`seenLibrary`) and appends new ones to the first group with room;
+    any ticker with state counts as seen, so a removed name stays
+    removed. `fetch-preload` keeps a ticker's existing snapshot when the
+    plan refuses it instead of dropping it.

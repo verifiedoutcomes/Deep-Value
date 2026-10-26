@@ -8,11 +8,11 @@
  * gitignored: provider data is licensed to the key holder, so it is never
  * committed to the public repo.
  */
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { FmpProvider, UsdOnlyFxTable, loadCompanySnapshot } from '../packages/data/src/index';
 import type { CompanySnapshot } from '../packages/engine/src/index';
 
-const DEFAULT_TICKERS = 'META,MSFT,GOOGL,AMZN,AAPL,NVDA,BRK-B,COST,KO,PYPL,NKE,INTC';
+const DEFAULT_TICKERS = 'META,MSFT,GOOGL,AMZN,AAPL,NVDA,BRK-B,COST,KO,PYPL,NKE,INTC,VRT,VST';
 /** The chart shows two years; momentum needs one. Three keeps the file small. */
 const PRICE_HISTORY_WEEKS = 156;
 
@@ -29,6 +29,13 @@ const tickers = (process.env.DVH_PRELOAD_TICKERS ?? DEFAULT_TICKERS)
   .map((t) => t.trim().toUpperCase())
   .filter(Boolean);
 
+// A ticker the plan refuses keeps the snapshot it already has in the
+// file (e.g. one assembled EDGAR-first), rather than dropping out.
+const previous = new Map<string, CompanySnapshot>(
+  existsSync(out)
+    ? (JSON.parse(readFileSync(out, 'utf8')) as CompanySnapshot[]).map((s) => [s.ticker, s])
+    : [],
+);
 const provider = new FmpProvider({ baseUrl, apiKey });
 const snapshots: CompanySnapshot[] = [];
 for (const ticker of tickers) {
@@ -42,7 +49,13 @@ for (const ticker of tickers) {
     snapshots.push(snap);
     console.log(`  ${ticker.padEnd(6)} ${snap.name} · $${snap.quote.price.toFixed(2)}`);
   } catch (err) {
-    console.warn(`  ${ticker.padEnd(6)} skipped: ${err instanceof Error ? err.message : err}`);
+    const kept = previous.get(ticker);
+    if (kept) snapshots.push(kept);
+    console.warn(
+      `  ${ticker.padEnd(6)} ${kept ? `kept ${kept.snapshotDate} snapshot` : 'skipped'}: ${
+        err instanceof Error ? err.message : err
+      }`,
+    );
   }
 }
 writeFileSync(out, JSON.stringify(snapshots));
