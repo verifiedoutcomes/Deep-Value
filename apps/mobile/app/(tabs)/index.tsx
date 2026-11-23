@@ -27,15 +27,15 @@ import { Chip, Mono } from '../../src/components/ui';
 import { pct, price, ratio } from '../../src/format';
 import { tapHaptic, warningHaptic } from '../../src/haptics';
 import { NETWORK_BLOCKED } from '../../src/host';
-import { LIBRARY_TICKERS } from '../../src/library';
+import { LIBRARY_AS_OF, LIBRARY_TICKERS } from '../../src/library';
+import { UNIVERSE, normalizeTicker as normalizeSymbol } from '@dvh/data';
+import type { SearchHit } from '../../src/data';
 
 const ROW_HEIGHT = 56;
 const DELETE_W = 84;
 
-/** Tickers are typed with $ prefixes and stray spaces; normalise them. */
-function normalizeTicker(raw: string): string {
-  return raw.trim().toUpperCase().replace(/^\$+/, '');
-}
+/** "$MSFT ", "brk.b" -> "MSFT", "BRK-B" (the SEC / Yahoo spelling). */
+const normalizeTicker = normalizeSymbol;
 
 /**
  * Swipe-left-to-delete row (PanResponder + Animated — no extra native
@@ -258,9 +258,21 @@ export default function WatchlistScreen() {
     }
   };
 
+  const pickHit = (r: SearchHit) => {
+    if (r.unsupported) {
+      warningHaptic();
+      showAlert(`${r.ticker} isn't supported yet`, r.unsupported);
+      return;
+    }
+    tryAdd(r.ticker);
+  };
+
   const addManual = () => {
     const t = normalizeTicker(query);
-    if (/^[A-Z.\-]{1,10}$/.test(t)) tryAdd(t);
+    if (!/^[A-Z.\-]{1,10}$/.test(t)) return;
+    const hit = search.data.find((r) => r.ticker === t);
+    if (hit) pickHit(hit);
+    else tryAdd(t);
   };
 
   const commitGroup = () => {
@@ -402,27 +414,51 @@ export default function WatchlistScreen() {
             </View>
           )}
           {newResults.map((r) => (
-            <Pressable key={r.ticker} style={styles.resultRow} onPress={() => tryAdd(r.ticker)}>
+            <Pressable key={r.ticker} style={styles.resultRow} onPress={() => pickHit(r)}>
               <View style={{ flex: 1, paddingRight: space.sm }}>
-                <Mono size="sm">+ {r.ticker}</Mono>
+                <Mono size="sm" color={r.unsupported ? colors.textDim : colors.text}>
+                  + {r.ticker}
+                </Mono>
                 {r.name ? (
-                  <Mono size="xs" color={colors.textFaint}>{r.name}</Mono>
+                  <Mono size="xs" color={colors.textFaint} lines={1}>
+                    {r.name}
+                    {r.indexes?.length ? ` · ${r.indexes.join(' · ')}` : ''}
+                  </Mono>
                 ) : null}
               </View>
-              <Mono size="xs" color={r.bundled ? colors.accent : colors.textFaint}>
-                {r.bundled ? 'data bundled' : r.exchange}
+              <Mono
+                size="xs"
+                color={r.unsupported ? colors.amber : r.bundled ? colors.accent : colors.textFaint}
+              >
+                {r.unsupported
+                  ? 'not supported'
+                  : r.bundled
+                    ? 'data bundled'
+                    : search.source === 'free'
+                      ? 'free live data'
+                      : r.exchange}
               </Mono>
             </Pressable>
           ))}
-          {!search.live && (
+          {search.data.length === 0 && q.length >= 2 && (
             <View style={styles.resultRow}>
               <Mono size="xs" color={colors.textFaint}>
-                {NETWORK_BLOCKED
-                  ? `Live search is off in the Claude preview. Bundled: ${LIBRARY_TICKERS.join(', ')}.`
-                  : 'Live search needs the data proxy or a dev API key (Settings).'}
+                Not in the S&P 500 or Nasdaq-100.
+                {search.live ? ' Type the exact ticker and add it to pull it live.' : ''}
               </Mono>
             </View>
           )}
+          <View style={styles.resultRow}>
+            <Mono size="xs" color={colors.textFaint}>
+              {NETWORK_BLOCKED
+                ? `All ${LIBRARY_TICKERS.length} of ${UNIVERSE.length} S&P 500 + Nasdaq-100 names that SEC filings support are bundled (as of ${LIBRARY_AS_OF}); live refresh is off in the Claude preview.`
+                : search.source === 'free'
+                  ? `Search covers all ${UNIVERSE.length} S&P 500 + Nasdaq-100 names; data is free and live (SEC filings + Yahoo prices).`
+                  : search.live
+                    ? `Search covers all ${UNIVERSE.length} S&P 500 + Nasdaq-100 names.`
+                    : `Search covers all ${UNIVERSE.length} S&P 500 + Nasdaq-100 names; live data in a browser needs the data proxy (Settings).`}
+            </Mono>
+          </View>
           {!allTickers.has(q) && /^[A-Z.\-]{1,10}$/.test(q) && (
             <Pressable style={styles.resultRow} onPress={addManual}>
               <Mono size="sm" color={colors.accent}>

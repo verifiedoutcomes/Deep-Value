@@ -108,7 +108,10 @@ export async function loadCompanySnapshot(
   const priorAnnual = annuals.find((r) => r.fiscalYear === latestFullYear - 1);
   const roic = latestAnnual?.roic ?? priorAnnual?.roic ?? ttm.roic ?? null;
 
+  const dataNotes = provider.dataNotes ? await provider.dataNotes(symbol) : [];
   return {
+    ...(provider.id ? { dataSource: provider.id } : {}),
+    ...(dataNotes.length ? { dataNotes } : {}),
     ticker: symbol.ticker,
     name: quote.name,
     exchange: symbol.exchange,

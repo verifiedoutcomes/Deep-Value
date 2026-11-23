@@ -8,14 +8,18 @@
  *    few icons are inlined (icons as data: URIs);
  *  - the page is served from an unknown path, so the app is exported
  *    with no base URL and boots at "/" (unknown paths redirect home);
- *  - network calls are blocked, so fresh snapshots are baked in as
- *    window.__DVH_PRELOAD__ and the app runs as host "claude-artifact";
+ *  - network calls are blocked, so the whole universe (S&P 500 +
+ *    Nasdaq-100, built from SEC EDGAR + Yahoo by scripts/build-dataset.ts)
+ *    is baked in, compactly encoded, as window.__DVH_PRELOAD__, the
+ *    names it couldn't build as window.__DVH_UNAVAILABLE__, and the app
+ *    runs as host "claude-artifact";
  *  - alert()/confirm() never show, which the app's in-app dialogs handle.
  *
  * Usage (from the repo root):
- *   node scripts/build-artifact.mjs            # reuse .artifact/preload.json if present
- *   DVH_FMP_API_KEY=… node scripts/build-artifact.mjs --fetch   # refresh it first
- * Output: .artifact/deep-value-hunter.html (gitignored).
+ *   node scripts/build-artifact.mjs             # reuse .artifact/universe-snapshots.json
+ *   DVH_SEC_CACHE=<dir> node scripts/build-artifact.mjs --dataset   # rebuild it first
+ * Output: .artifact/deep-value-hunter.html (gitignored, like the dataset:
+ * it carries Yahoo prices, which are not ours to redistribute).
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -25,21 +29,25 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, '.artifact');
 const webDir = path.join(outDir, 'web');
-const preloadPath = path.join(outDir, 'preload.json');
+const datasetPath = path.join(outDir, 'universe-snapshots.json');
+const reportPath = path.join(outDir, 'dataset-report.json');
 const outFile = path.join(outDir, 'deep-value-hunter.html');
 mkdirSync(outDir, { recursive: true });
 
 const run = (cmd, args, opts = {}) =>
   execFileSync(cmd, args, { stdio: 'inherit', cwd: root, ...opts });
 
-// 1. Optional: refresh the bundled snapshots from FMP.
-if (process.argv.includes('--fetch')) {
-  const bundled = path.join(outDir, 'fetch-preload.mjs');
+// 1. Optional: rebuild the universe dataset from SEC EDGAR + Yahoo.
+if (process.argv.includes('--dataset')) {
+  const bundled = path.join(outDir, 'build-dataset.mjs');
   run('npx', [
-    'esbuild', 'scripts/fetch-preload.ts', '--bundle', '--platform=node',
+    'esbuild', 'scripts/build-dataset.ts', '--bundle', '--platform=node',
     '--format=esm', '--log-level=warning', `--outfile=${bundled}`,
   ]);
-  run('node', [bundled, preloadPath]);
+  run('node', [bundled, datasetPath]);
+}
+if (!existsSync(datasetPath)) {
+  throw new Error(`no ${path.relative(root, datasetPath)}: run with --dataset first`);
 }
 
 // 2. Export the web app with no base path.
@@ -68,9 +76,46 @@ if (leftover.length) console.warn(`warning: ${leftover.length} asset paths not i
 // \x3C is "<" in strings, templates and regexes alike.
 js = js.replace(/<\/script/gi, '\\x3C/script').replace(/<!--/g, '\\x3C!--');
 
-// 4. Bundled snapshots (JSON is valid JS; escape "<" for the same reason).
-const preload = existsSync(preloadPath) ? JSON.parse(readFileSync(preloadPath, 'utf8')) : [];
-const preloadJs = JSON.stringify(preload).replace(/</g, '\\u003c');
+// 4. Bundled snapshots, compactly encoded (decoded by apps/mobile/src/
+// library.ts): each snapshot's rows become arrays keyed by one shared
+// key list and its prices [date, close] pairs, 2 years of them (the
+// chart's window; momentum needs 1). JSON is valid JS; "<" is escaped
+// for the same reason as above.
+const PRICE_WEEKS = 104;
+const snapshots = JSON.parse(readFileSync(datasetPath, 'utf8'));
+const rowKeys = [...new Set(snapshots.flatMap((s) => s.rows.flatMap((r) => Object.keys(r))))];
+// Only optional fields are ever missing (enterpriseValue on the TTM row,
+// priorTtmRevenue on FY rows), and the engine reads missing and null
+// alike there, so a gap is encoded as null; trailing gaps are dropped.
+const OPTIONAL = new Set(['enterpriseValue', 'priorTtmRevenue', 'depreciationAmortization']);
+const encodeRow = (r) => {
+  const vals = rowKeys.map((k) => {
+    if (r[k] !== undefined) return r[k];
+    if (!OPTIONAL.has(k)) throw new Error(`row ${r.yearLabel} lacks required ${k}`);
+    return null;
+  });
+  while (vals.length && vals.at(-1) === null && r[rowKeys[vals.length - 1]] === undefined) vals.pop();
+  return vals;
+};
+const items = snapshots.map(({ rows, priceHistory, ...rest }) => ({
+  ...rest,
+  r: rows.map(encodeRow),
+  p: priceHistory.slice(-PRICE_WEEKS).map((pt) => [pt.date, Math.round(pt.close * 1e4) / 1e4]),
+}));
+const preloadJs = JSON.stringify({ v: 2, rowKeys, items }).replace(/</g, '\\u003c');
+
+// Universe members the dataset couldn't build, with the reason (minus
+// the "TICKER: " prefix the provider's errors carry).
+const report = existsSync(reportPath) ? JSON.parse(readFileSync(reportPath, 'utf8')) : [];
+const unavailable = Object.fromEntries(
+  report
+    .filter((r) => r.status === 'error')
+    .map((r) => {
+      const why = r.error.replace(/^[A-Z.\-]+: /, '');
+      return [r.ticker, `${why[0].toUpperCase()}${why.slice(1)}, so it can't be modelled from the free source yet.`];
+    }),
+);
+const unavailableJs = JSON.stringify(unavailable).replace(/</g, '\\u003c');
 
 // 5. Compose the page. The viewer wraps it in its own document skeleton
 // (doctype, head with charset + viewport, body), so this is content only.
@@ -99,6 +144,7 @@ const page = `<title>Deep Value Hunter</title>
 <script>
   window.__DVH_HOST__ = 'claude-artifact';
   window.__DVH_PRELOAD__ = ${preloadJs};
+  window.__DVH_UNAVAILABLE__ = ${unavailableJs};
   (function () {
     // iOS zooms the page into any focused input under 16px (the forecast
     // cells are smaller); capping the scale stops that, pinch still works.
@@ -124,5 +170,6 @@ ${js}
 writeFileSync(outFile, page);
 const mb = (Buffer.byteLength(page) / 1e6).toFixed(2);
 console.log(
-  `\nwrote ${path.relative(root, outFile)} · ${mb} MB · ${preload.length} bundled snapshots · ${inlined} icons inlined`,
+  `\nwrote ${path.relative(root, outFile)} · ${mb} MB · ${items.length} bundled snapshots · ` +
+    `${Object.keys(unavailable).length} unavailable · ${inlined} icons inlined`,
 );

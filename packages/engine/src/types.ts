@@ -248,4 +248,8 @@ export interface CompanySnapshot {
   ownership: OwnershipStats;
   rows: HistoricalRowInput[];
   priceHistory: PricePoint[];
+  /** Where the figures came from, e.g. 'free:sec-edgar+yahoo'. */
+  dataSource?: string;
+  /** Caveats about derived figures (shown on the Company tab). */
+  dataNotes?: string[];
 }

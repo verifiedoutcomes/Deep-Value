@@ -566,3 +566,88 @@ disagreed, **the file won**; those cases are called out explicitly.
     any ticker with state counts as seen, so a removed name stays
     removed. `fetch-preload` keeps a ticker's existing snapshot when the
     plan refuses it instead of dropping it.
+
+59. **Free data source; the S&P 500 + Nasdaq-100 universe (2026-11-23).**
+    The ask: pull company data from a free, public source and make every
+    S&P 500 and Nasdaq-100 company searchable. Google Sheets was
+    rejected: GOOGLEFINANCE's history can't be read through the Sheets
+    API or a published sheet (Google blocks it), each company would need
+    a hand-built sheet, and its terms bar redistribution. The free stack:
+    - **Statements:** SEC EDGAR XBRL companyfacts (public domain).
+      `sec-facts.ts` replaces the old EDGAR adapter's extraction. Rules,
+      each pinned by a test named after the filing that forced it:
+      latest-filed value per period; annual = 340–380-day 10-K periods;
+      fiscal years named by their end date (except 52/53-week years ending
+      Jan 1–10, which belong to the prior year); revenue anchored on the
+      largest plausible tag in the latest year (General Mills tags a $2B
+      sub-item as "Revenues"), net of excise (Philip Morris), with
+      candidates below 20% of operating cash flow dropped (a REIT's
+      "other revenue"), other years using the anchor or a neighbour
+      within 0.5–2× (else a gap); banks (two or more bank-only tags) use
+      net interest + non-interest income; operating income falls back
+      to pre-tax + interest, then revenue − total costs; share counts
+      checked against net income ÷ diluted EPS (McDonald's tags millions)
+      and a single class giving way to the diluted total (Alphabet).
+    - **TTM:** latest FY + this year's 10-Q YTD − last year's, one tag
+      per field. A field the 10-Qs don't tag keeps the fiscal-year figure
+      with a note. That fallback now runs before SBC defaults to zero:
+      75 companies had been getting a TTM SBC of 0. When the 10-Qs drop
+      interest expense (Genuine Parts, Lilly, TJX, KKR, PulteGroup, PPG),
+      the pre-tax + interest proxy keeps the fiscal year's interest
+      instead of silently losing it (GPC's TTM EBIT was −$0.01B, now
+      $0.15B).
+    - **Prices:** Yahoo's public chart endpoint gives weekly closes,
+      splits and the live price. Market cap = SEC shares × price, with
+      shares restated through any split after the filing date. FY-end
+      market caps use restated shares × split-adjusted close, and the
+      share series drops one-year spikes and counts more than 5× away
+      from today's. Yahoo's data is for personal use, so a paid release
+      needs a licensed price feed; statements stay free.
+    - **Net debt** = borrowings + finance + operating lease liabilities,
+      matching the FMP `netDebt` the sheet was built on.
+    - **Share overrides** (`share-overrides.json`): multi-class and Up-C
+      structures that SEC's standard data can't total. BRK-B, ERIE, ARES
+      and STZ use 10-Q cover-page counts; FMP's own figures were wrong for
+      BRK-B and ERIE, which it counts as one class. V, IBKR, BX and CVNA
+      use FMP's profile count. For these, historical market caps are left
+      blank, so the exit multiple seeds from today's EV/EBIT.
+    - **Predecessor CIKs** carry history across holding-company
+      reorganisations (Exxon's new registrant has no 10-K yet).
+    - **Not covered (12 of 518):**
+      - Seven foreign issuers file 20-F/40-F (ARM, ASML, CCEP, FER, NBIS,
+        PDD, TRI).
+      - Three have no 10-K yet (HONA, SPCX, VYLR).
+      - APA and LHX tag their latest revenue only in company-specific
+        tags, which companyfacts omits.
+
+      Search lists all 12 with the reason rather than hiding them.
+    - **Validation against FMP:**
+      - Shares: median gap 0.00% over 130 names, 112 within 2%. The rest
+        are explained: Up-C structures (now overridden), multi-class
+        companies where FMP undercounts, and diluted vs basic counts.
+      - Statements, 55 company-years: revenue, net income, OCF, capex,
+        SBC and gross profit all within 1%; operating income 51 of 55
+        (the 4 are pre-tax-proxy years).
+      - A sanity sweep's remaining flags are real events: IPOs, mergers,
+        COVID, hypergrowth, and one-off charges such as Gilead's
+        $10.4B and Intel's $11.0B in Q2 2026, and Carrier's Q3.
+    - **Notes name their periods:** "… (FY2009–FY2011, TTM)." A gap in
+      2010 no longer reads as if it affected today's figures. The Company
+      tab shows the source and the notes.
+    - **Missing capex** (about 40 names: mostly banks and insurers, plus
+      Valero, United Rentals, ConocoPhillips, NextEra and others that
+      moved to company-specific tags) used to seed a silent 0% FCF
+      margin. A new `no-fcf-data` assumption check says so and offers
+      the last known year's margin.
+    - **ROIC** is display-only and was FMP's `returnOnInvestedCapital`.
+      Its numerator couldn't be reproduced from statements (the invested
+      capital matched working capital + PP&E + goodwill + intangibles; no
+      NOPAT variant matched), so the free source shows – rather than a
+      different number under the same label.
+
+    The native app pulls live from this source with no key, and the
+    proxy still wins when set. Browsers can't (SEC and Yahoo send no CORS
+    headers), so the web build keeps the proxy or a dev key. The Claude
+    artifact bundles all 506 snapshots, 4.4 MB: rows as arrays under
+    shared keys and two years of weekly prices. `fetch-preload.ts` (16
+    names from the FMP dev plan) is gone.

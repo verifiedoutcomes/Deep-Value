@@ -1,15 +1,29 @@
 /**
- * Live data wiring: React Query hooks over the provider stack
- * (FMP via the proxy, USD-only FX at launch).
+ * Live data wiring: React Query hooks over the provider stack. In order:
+ *  - the data proxy, when configured (production: one /bundle call);
+ *  - on the phone, the free keyless source: SEC EDGAR statements + Yahoo
+ *    chart prices, fetched directly (native apps have no CORS limits);
+ *  - in a browser, a developer FMP key if set (SEC and Yahoo send no CORS
+ *    headers, so a browser can't use the free source without the proxy);
+ *  - in the Claude preview, nothing: its viewer blocks the network and the
+ *    whole S&P 500 + Nasdaq-100 ships bundled instead.
  */
 import { useMemo } from 'react';
+import { Platform } from 'react-native';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import {
   FmpProvider,
+  FreeProvider,
+  PREDECESSORS,
+  SHARE_OVERRIDES,
   UsdOnlyFxTable,
   loadCompanySnapshot,
   compareSnapshots,
+  searchUniverse,
+  universeEntry,
+  unsupportedReason,
+  type SecCompanyFacts,
   type SymbolRef,
   type ParityReport,
 } from '@dvh/data';
@@ -17,7 +31,7 @@ import type { CompanySnapshot } from '@dvh/engine';
 import { BUNDLED_META, useAppStore } from './store';
 import { successHaptic, warningHaptic } from './haptics';
 import { NETWORK_BLOCKED, PREVIEW_OFFLINE_MESSAGE } from './host';
-import { searchLibrary } from './library';
+import { LIBRARY, UNAVAILABLE } from './library';
 
 export function proxyBaseUrl(): string {
   const fromStore = useAppStore.getState().proxyBaseUrl;
@@ -27,10 +41,67 @@ export function proxyBaseUrl(): string {
   return fromConfig.includes('example.workers.dev') ? '' : fromConfig;
 }
 
-/** True when either a proxy or a dev key makes live pulls possible. */
+export type LiveSource = 'proxy' | 'free' | 'fmp-key' | 'none';
+
+/** Where a live pull would come from right now. */
+export function liveSource(): LiveSource {
+  if (NETWORK_BLOCKED) return 'none';
+  if (proxyBaseUrl()) return 'proxy';
+  if (Platform.OS !== 'web') return 'free';
+  return useAppStore.getState().devFmpApiKey ? 'fmp-key' : 'none';
+}
+
 export function liveDataConfigured(): boolean {
-  if (NETWORK_BLOCKED) return false;
-  return Boolean(proxyBaseUrl() || useAppStore.getState().devFmpApiKey);
+  return liveSource() !== 'none';
+}
+
+/**
+ * SEC asks every client to identify itself with a contact. Set
+ * expo.extra.secContact in app.json to your own address before release.
+ */
+function secUserAgent(): string {
+  const contact = (Constants.expoConfig?.extra?.secContact as string) || 'contact: deepvaluehunter@example.com';
+  return `DeepValueHunter/0.1 (${contact})`;
+}
+
+let secTickerMap: Promise<Record<string, number>> | null = null;
+
+/** CIK for a ticker: the bundled universe, else SEC's own ticker file. */
+async function cikFor(ticker: string): Promise<number | null> {
+  const e = universeEntry(ticker);
+  if (e) return e.cik;
+  secTickerMap ??= fetch('https://www.sec.gov/files/company_tickers.json', {
+    headers: { 'User-Agent': secUserAgent() },
+  })
+    .then((r) => {
+      if (!r.ok) throw new Error(`SEC ticker map: HTTP ${r.status}`);
+      return r.json() as Promise<Record<string, { cik_str: number; ticker: string }>>;
+    })
+    .then((j) =>
+      Object.fromEntries(Object.values(j).map((x) => [x.ticker.toUpperCase().replace(/\./g, '-'), x.cik_str])),
+    );
+  const map = await secTickerMap.catch((): Record<string, number> => {
+    secTickerMap = null; // retry on the next call
+    return {};
+  });
+  return map[ticker] ?? null;
+}
+
+/** The free source, wired for the phone (a fresh instance per pull). */
+function freeProvider(): FreeProvider {
+  return new FreeProvider({
+    loadFacts: async (cik) => {
+      const res = await fetch(
+        `https://data.sec.gov/api/xbrl/companyfacts/CIK${String(cik).padStart(10, '0')}.json`,
+        { headers: { 'User-Agent': secUserAgent() } },
+      );
+      if (!res.ok) throw new Error(`SEC filings: HTTP ${res.status}`);
+      return (await res.json()) as SecCompanyFacts;
+    },
+    cikFor,
+    predecessors: PREDECESSORS,
+    shareOverrides: SHARE_OVERRIDES,
+  });
 }
 
 export function makeProvider(): FmpProvider {
@@ -60,8 +131,15 @@ export const FRESHNESS_HOURS = 6;
 
 export async function pullSnapshot(ticker: string): Promise<CompanySnapshot> {
   if (NETWORK_BLOCKED) throw new Error(PREVIEW_OFFLINE_MESSAGE);
-  if (!liveDataConfigured()) {
-    throw new Error('No data source yet: add the data proxy (or a dev API key) in Settings.');
+  const source = liveSource();
+  if (source === 'none') {
+    throw new Error('In a browser, live data needs the data proxy (or a dev API key) in Settings.');
+  }
+  const entry = universeEntry(ticker);
+  const unsupported = entry && unsupportedReason(entry);
+  if (unsupported) throw new Error(unsupported);
+  if (source === 'free') {
+    return loadCompanySnapshot(freeProvider(), symbolFor(ticker), new UsdOnlyFxTable());
   }
   const proxy = proxyBaseUrl();
   if (proxy) {
@@ -129,32 +207,44 @@ export function useRefreshSnapshot(ticker: string) {
 export interface SearchHit {
   ticker: string;
   exchange: string;
-  /** Present for bundled names, which open instantly with data. */
   name?: string;
+  /** Snapshot ships with this build: opens instantly, even offline. */
   bundled: boolean;
+  /** 'S&P 500' / 'Nasdaq-100' membership, for universe members. */
+  indexes?: string[];
+  /** Why this name can't be valued, when it can't. */
+  unsupported?: string;
 }
 
 /**
- * Bundled names match instantly and offline; the provider search joins
- * them when a data source is configured.
+ * Every S&P 500 and Nasdaq-100 name matches instantly and offline; the
+ * provider search adds other tickers when FMP (key or proxy) is wired.
  */
 export function useTickerSearch(query: string) {
-  const live = liveDataConfigured();
+  const source = liveSource();
+  const remoteEnabled = source === 'proxy' || source === 'fmp-key';
   const remote = useQuery({
     queryKey: ['search', query],
     queryFn: () => makeProvider().search(query),
-    enabled: query.trim().length >= 1 && live,
+    enabled: query.trim().length >= 1 && remoteEnabled,
     staleTime: 60_000,
   });
   const data = useMemo<SearchHit[]>(() => {
-    const local = searchLibrary(query).map((h) => ({ ...h, bundled: true }));
+    const local: SearchHit[] = searchUniverse(query).map((e) => ({
+      ticker: e.ticker,
+      exchange: e.exchange,
+      name: e.name,
+      bundled: LIBRARY[e.ticker] != null,
+      indexes: e.indexes.map((i) => (i === 'SP500' ? 'S&P 500' : 'Nasdaq-100')),
+      unsupported: unsupportedReason(e) ?? UNAVAILABLE[e.ticker] ?? undefined,
+    }));
     const seen = new Set(local.map((h) => h.ticker));
     const fromProvider = (remote.data ?? [])
       .filter((r) => !seen.has(r.ticker))
-      .map((r) => ({ ticker: r.ticker, exchange: r.exchange, bundled: false }));
+      .map((r) => ({ ticker: r.ticker, exchange: r.exchange, bundled: LIBRARY[r.ticker] != null }));
     return [...local, ...fromProvider];
   }, [query, remote.data]);
-  return { data, live, isLoading: remote.isLoading, isError: remote.isError };
+  return { data, live: source !== 'none', source, isLoading: remote.isLoading, isError: remote.isError };
 }
 
 /** Hidden dev screen: live META pull diffed against the bundled fixture. */

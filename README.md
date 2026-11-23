@@ -13,10 +13,12 @@ symbol/FX architecture ready for other markets later.
 
 ```
 packages/engine   pure TS valuation engine (no React, no network) + META fixture + gate tests
-packages/data     provider abstraction: FMP adapter, SEC EDGAR fallback, FX, snapshot assembly
+packages/data     provider abstraction: free SEC EDGAR + Yahoo source, FMP adapter, FX,
+                  snapshot assembly, the S&P 500 + Nasdaq-100 universe
 apps/api          Cloudflare Worker proxy (holds the FMP key, caches responses)
 apps/mobile       Expo SDK 54 app (RN 0.81 / React 19, expo-router v6, zustand, React Query, react-native-svg)
-scripts/          fixture extraction from the xlsx (openpyxl)
+scripts/          fixture extraction from the xlsx (openpyxl); universe, dataset and
+                  Claude-artifact builders
 DECISIONS.md      every judgement call, incl. replicated sheet quirks
 ```
 
@@ -54,9 +56,37 @@ DVH_FMP_BASE_URL=https://financialmodelingprep.com DVH_FMP_API_KEY=... \
 
 ## Data
 
-Provider: **Financial Modeling Prep** (verified cheapest full-coverage
-option; see DECISIONS.md §16). Get a key at financialmodelingprep.com —
-the Starter tier suffices. Free fallback: SEC EDGAR XBRL company facts.
+**Free source (the default on iPhone; no key, no account).** Every
+S&P 500 and Nasdaq-100 company is searchable in the app (518 tickers,
+`packages/data/src/universe.json`). A live pull assembles the snapshot
+on the phone:
+
+- **Financial statements:** SEC EDGAR XBRL company facts
+  (`data.sec.gov`, public domain), 2007 onwards. TTM = latest 10-K + this
+  year's 10-Q year-to-date − the same period a year earlier.
+- **Prices, splits, market cap:** Yahoo Finance's public chart endpoint.
+  Market cap = SEC share count (restated through later splits) × price.
+  Yahoo's data is for personal, non-commercial use; a paid release
+  should switch prices to a licensed feed.
+- **Index membership:** Wikipedia's current constituent tables, mapped
+  to SEC CIKs by `scripts/build_universe.py` (re-run it when the indexes
+  change; it checks counts and CIKs against SEC's own ticker file).
+
+Coverage and limits (DECISIONS.md §59): 506 of 518 build. Seven foreign
+issuers file 20-F/40-F rather than 10-K (ARM, ASML, CCEP, FER, NBIS, PDD,
+TRI); three have no 10-K yet (HONA, SPCX, VYLR); and APA and LHX report
+their latest revenue only in company-specific tags. Search shows each of
+these with its reason. Anything the standard tags can't give is
+approximated and flagged on the Company tab. Ownership, short interest
+and ROIC aren't in public filings, so they show as –. Set
+`expo.extra.secContact` in `apps/mobile/app.json` (e.g. `"contact:
+you@example.com"`) before release: SEC asks every client to identify
+itself, and the placeholder is not a real address. Browsers can't call SEC or Yahoo
+(no CORS), so the web build still needs the proxy or a dev key.
+
+**Financial Modeling Prep** (optional, via the proxy): the verified
+cheapest full-coverage paid option (DECISIONS.md §16). Get a key at
+financialmodelingprep.com; the Starter tier suffices.
 **Nothing here signs you up or spends money; keys and accounts are yours
 to create.**
 
@@ -127,20 +157,22 @@ inside the Claude app: https://claude.ai/artifact/8u8StfF7JT2zwXk8w5zbWy
 The artifact viewer is locked down (no network, no `alert`/`confirm`,
 unknown serving path), so `scripts/build-artifact.mjs` packages a special
 build: one self-contained page with the bundle and icons inlined, no base
-path, in-app dialogs, and fresh snapshots baked in. Live refresh is off in
-that build; everything else (editing, ⓘ cards, saved analyses, checklist)
-works and persists per device.
+path, in-app dialogs, and the whole universe baked in: 506 snapshots from
+the free source, compactly encoded, about 4.4 MB. Live refresh is off in
+that build; everything else (search, editing, ⓘ cards, saved analyses,
+checklist) works and persists per device.
 
 ```bash
-# from the repo root; --fetch pulls fresh snapshots with your FMP key
-DVH_FMP_API_KEY=… node scripts/build-artifact.mjs --fetch
+# from the repo root; --dataset rebuilds every snapshot from SEC + Yahoo
+# (~2 GB of SEC filings on the first run; DVH_SEC_CACHE keeps them)
+DVH_SEC_CACHE=~/.cache/dvh-edgar node scripts/build-artifact.mjs --dataset
 # → .artifact/deep-value-hunter.html, then publish it to the artifact
 ```
 
-`DVH_PRELOAD_TICKERS=META,MSFT,…` changes the bundled names. The snapshots
-stay in `.artifact/` (gitignored) because provider data is licensed to the
-key holder; don't commit them or share the artifact publicly without
-checking your data plan's redistribution terms.
+`DVH_ONLY=AAPL,MSFT` limits a dataset run to some tickers, and
+`.artifact/dataset-report.json` lists each ticker's result and data notes.
+The dataset and page stay in `.artifact/` (gitignored) because they carry
+Yahoo prices; keep the artifact private.
 
 ## App Store
 

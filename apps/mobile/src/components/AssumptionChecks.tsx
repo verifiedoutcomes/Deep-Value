@@ -17,6 +17,7 @@ export interface CheckActions {
   useMultiple: (m: number) => void;
   useConventional: () => void;
   useOpMargin: (m: number) => void;
+  useFcfMargin: (m: number) => void;
 }
 
 interface Line {
@@ -79,6 +80,20 @@ function describe(f: AssumptionFlag, finalYear: number, act: CheckActions): Line
           avg != null && avg > 0 && (f.ttmOpMargin == null || avg > f.ttmOpMargin)
             ? { label: `use 4-yr avg margin ${pct(avg)}`, run: () => act.useOpMargin(avg) }
             : undefined,
+      };
+    }
+    case 'no-fcf-data': {
+      const k = f.lastKnown;
+      return {
+        title: 'No free cash flow data',
+        detail:
+          'Adj FCF is blank for the TTM and the latest fiscal year (capex or cash flow isn\'t in ' +
+          'the data), so the forecast seeded a 0% FCF margin and the fair value rests on the ' +
+          'terminal value alone. Enter FCF margins yourself' +
+          (k ? `, or start from ${k.year ? `FY${k.year}` : 'the last known year'}'s ${pct(k.margin)}.` : '.'),
+        action: k
+          ? { label: `use ${k.year ? `FY${k.year}` : 'last known'} FCF margin ${pct(k.margin)}`, run: () => act.useFcfMargin(k.margin) }
+          : undefined,
       };
     }
   }

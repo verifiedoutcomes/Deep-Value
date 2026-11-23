@@ -1,0 +1,46 @@
+{
+ "asOf": "2026-11-23",
+ "why": "SEC's standard XBRL data has no single total share count for these share structures; each total below is economic shares in units of the listed class.",
+ "companies": {
+  "BRK-B": {
+   "shares": 2124519594,
+   "asOf": "2026-11-09",
+   "source": "10-Q cover (30 Sep 2026): Class A 480,476 \u00d7 1,500 + Class B 1,403,805,594"
+  },
+  "ERIE": {
+   "shares": 52289868,
+   "asOf": "2026-10-29",
+   "source": "10-Q cover: Class A 46,189,068 + Class B 2,542 \u00d7 2,400 (convertible)"
+  },
+  "ARES": {
+   "shares": 330317933,
+   "asOf": "2026-11-06",
+   "source": "10-Q cover: Class A + non-voting + Class C (exchangeable operating-group units)"
+  },
+  "STZ": {
+   "shares": 169224220,
+   "asOf": "2026-10-07",
+   "source": "10-Q cover: Class A + convertible common"
+  },
+  "V": {
+   "shares": 1865799971,
+   "asOf": "2026-11-23",
+   "source": "FMP profile, as-converted Class A (10-K cover classes \u00d7 conversion rates \u2248 1,857M)"
+  },
+  "IBKR": {
+   "shares": 1757586537,
+   "asOf": "2026-11-23",
+   "source": "FMP profile, Class A + IBG LLC units (Class A 453.1M = 25.8%)"
+  },
+  "BX": {
+   "shares": 1151749939,
+   "asOf": "2026-11-23",
+   "source": "FMP profile, common + Blackstone Holdings partnership units (common 751.1M)"
+  },
+  "CVNA": {
+   "shares": 1096835667,
+   "asOf": "2026-11-23",
+   "source": "FMP profile, Class A + exchangeable LLC units (cover A + B = 1,103.3M)"
+  }
+ }
+}

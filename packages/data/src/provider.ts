@@ -78,4 +78,6 @@ export interface DataProvider {
   ownership(symbol: SymbolRef): Promise<OwnershipStats>;
   /** Weekly closes for the trailing `years` years. */
   weeklyPrices(symbol: SymbolRef, years: number): Promise<PricePoint[]>;
+  /** Caveats about how this company's figures were derived, if any. */
+  dataNotes?(symbol: SymbolRef): Promise<string[]>;
 }

@@ -9,7 +9,7 @@
  * 48× exit multiple; INTC's near-zero operating income made EV/EBIT
  * meaningless. Each flag below catches one of those.
  */
-import type { HorizonYears, Maybe, ScenarioInputs, ScenarioKind } from './types';
+import type { HistoricalRowInput, HorizonYears, Maybe, ScenarioInputs, ScenarioKind } from './types';
 import type { CapexTreatment } from './historical';
 import type { CompanyAnalysis } from './index';
 
@@ -49,6 +49,16 @@ export type AssumptionFlag =
       currentEvEbit: Maybe;
       ttmOpMargin: Maybe;
       avg4OpMargin: Maybe;
+    }
+  | {
+      /**
+       * No Adj FCF in the TTM row or the latest fiscal year (capex or
+       * cash flow missing from the data), so an unedited forecast seeds a
+       * 0% FCF margin and the fair value is the terminal value alone.
+       */
+      kind: 'no-fcf-data';
+      /** The most recent fiscal year that has an Adj FCF margin, if any. */
+      lastKnown: { year: string | null; margin: number } | null;
     };
 
 export function checkAssumptions(
@@ -56,6 +66,8 @@ export function checkAssumptions(
   kind: ScenarioKind,
   horizon: HorizonYears,
   treatment: CapexTreatment,
+  /** The snapshot's rows, to name the year a fallback figure comes from. */
+  rows?: readonly HistoricalRowInput[],
 ): AssumptionFlag[] {
   const inputs: ScenarioInputs = analysis.scenarioInputs[kind][horizon];
   const flags: AssumptionFlag[] = [];
@@ -84,6 +96,21 @@ export function checkAssumptions(
       currentEvEbit: analysis.header.evOverOperatingIncome,
       trimmedMean: analysis.summary.evEbitTrimmean,
     });
+  }
+
+  const n = analysis.derived.length;
+  const ttmFcf = analysis.derived[n - 1]?.adjFcfMargin;
+  const fyFcf = analysis.derived[n - 2]?.adjFcfMargin;
+  if (ttmFcf == null && fyFcf == null && years.every((y) => y.adjFcfMargin === 0)) {
+    let lastKnown: { year: string | null; margin: number } | null = null;
+    for (let i = n - 3; i >= Math.max(0, n - 5); i--) {
+      const m = analysis.derived[i]?.adjFcfMargin;
+      if (m != null) {
+        lastKnown = { year: rows?.[i] ? String(rows[i]!.yearLabel) : null, margin: m };
+        break;
+      }
+    }
+    flags.push({ kind: 'no-fcf-data', lastKnown });
   }
 
   const ev = analysis.header.evOverOperatingIncome;

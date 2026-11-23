@@ -63,6 +63,25 @@ describe('checkAssumptions', () => {
     const a = analyzeCompany(snap, {}, 'conventional', APP);
     expect(kinds(checkAssumptions(a, 'base', 5, 'conventional'))).toContain('depressed-earnings');
   });
+
+  it('flags a forecast seeded at 0% FCF because capex is missing (Valero, United Rentals)', () => {
+    const snap = structuredClone(fixture);
+    const n = snap.rows.length;
+    snap.rows[n - 1]!.capex = null; // TTM
+    snap.rows[n - 2]!.capex = null; // latest FY
+    const a = analyzeCompany(snap, {}, 'conventional', APP);
+    const f = checkAssumptions(a, 'base', 5, 'conventional', snap.rows).find((x) => x.kind === 'no-fcf-data');
+    if (f?.kind !== 'no-fcf-data') throw new Error('expected a no-fcf-data flag');
+    expect(f.lastKnown?.year).toBe(String(snap.rows[n - 3]!.yearLabel));
+    expect(f.lastKnown?.margin).toBeCloseTo(a.derived[n - 3]!.adjFcfMargin!, 12);
+    // once the user enters a margin, the flag goes away
+    const years = a.scenarioInputs.base[5].years.map((y) => ({ ...y, adjFcfMargin: 0.2 }));
+    const edited = analyzeCompany(snap, { years: { base: { 5: years } } }, 'conventional', APP);
+    expect(kinds(checkAssumptions(edited, 'base', 5, 'conventional', snap.rows))).not.toContain('no-fcf-data');
+    // and complete data never raises it
+    const full = analyzeCompany(fixture, {}, 'conventional', APP);
+    expect(kinds(checkAssumptions(full, 'base', 5, 'conventional'))).not.toContain('no-fcf-data');
+  });
 });
 
 describe('fadeGrowth', () => {

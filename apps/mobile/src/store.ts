@@ -17,7 +17,7 @@ import type {
 import type { CapexTreatment, HorizonYears, ScenarioKind } from '@dvh/engine';
 import { CHECKLIST_QUESTIONS, analyzeCompany } from '@dvh/engine';
 import { APP_ANALYZE_OPTIONS } from './engineOptions';
-import { LIBRARY, LIBRARY_TICKERS, stripLibrary, withLibrary } from './library';
+import { FEATURED, LIBRARY, stripLibrary, withLibrary } from './library';
 
 export { BUNDLED_META } from './library';
 
@@ -116,8 +116,9 @@ interface AppState {
    * reinstall does NOT mint a fresh quota.
    */
   installId: string;
-  /** Bundled tickers already offered once, so new ones (added to a later
-   *  build) join the watchlist while removed ones never come back. */
+  /** Featured tickers already offered once, so new ones (added to a later
+   *  build) join the watchlist while removed ones never come back. (Name
+   *  kept from v4 for persisted-state compatibility.) */
   seenLibrary: string[];
   /** Last successful live pull per ticker (ms epoch) — freshness gate. */
   lastFetchAt: Record<string, number>;
@@ -192,11 +193,11 @@ const withChecklistEdit = (
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
-      // First run: every bundled name pre-loaded (META from the sheet
-      // fixture, plus any snapshots the hosting page preloads).
-      watchlistGroups: [{ name: 'Main', tickers: LIBRARY_TICKERS.slice(0, MAX_GROUP_SIZE) }],
+      // First run: the featured names (META from the sheet fixture; the
+      // preview build also bundles the whole index universe, searchable).
+      watchlistGroups: [{ name: 'Main', tickers: FEATURED.slice(0, MAX_GROUP_SIZE) }],
       activeGroup: 'Main',
-      tickers: Object.fromEntries(LIBRARY_TICKERS.map((t) => [t, seedTicker(t)])),
+      tickers: Object.fromEntries(FEATURED.map((t) => [t, seedTicker(t)])),
       selectedTicker: 'META',
       capexTreatment: 'conventional',
       proxyBaseUrl: '',
@@ -206,7 +207,7 @@ export const useAppStore = create<AppState>()(
       reviewingId: null,
       installId: '',
       lastFetchAt: {},
-      seenLibrary: LIBRARY_TICKERS,
+      seenLibrary: FEATURED,
       quotaRemaining: null,
       markFetched: (ticker) =>
         set((s) => ({ lastFetchAt: { ...s.lastFetchAt, [ticker]: Date.now() } })),
@@ -474,11 +475,11 @@ export const useAppStore = create<AppState>()(
             { ...st, snapshots: withLibrary(t, st.snapshots ?? []) },
           ]),
         );
-        // Names bundled since this device last opened the app join the
+        // Names featured since this device last opened the app join the
         // first group with room. "Seen" also counts any ticker with state,
-        // so a bundled name the user removed stays removed.
+        // so a featured name the user removed stays removed.
         const seen = new Set([...(p.seenLibrary ?? []), ...Object.keys(p.tickers ?? {})]);
-        const fresh = LIBRARY_TICKERS.filter((t) => !seen.has(t));
+        const fresh = FEATURED.filter((t) => !seen.has(t));
         let watchlistGroups = p.watchlistGroups ?? current.watchlistGroups;
         const listed = new Set(watchlistGroups.flatMap((g) => g.tickers));
         for (const t of fresh) {
@@ -495,7 +496,7 @@ export const useAppStore = create<AppState>()(
           ...p,
           tickers,
           watchlistGroups,
-          seenLibrary: [...new Set([...seen, ...LIBRARY_TICKERS])],
+          seenLibrary: [...new Set([...seen, ...FEATURED])],
         };
       },
     },

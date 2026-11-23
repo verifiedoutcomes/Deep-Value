@@ -57,7 +57,8 @@
       "baseUrl": "/Deep-Value"
     },
     "extra": {
-      "proxyBaseUrl": "https://dvh-proxy.example.workers.dev"
+      "proxyBaseUrl": "https://dvh-proxy.example.workers.dev",
+      "secContact": ""
     }
   }
 }

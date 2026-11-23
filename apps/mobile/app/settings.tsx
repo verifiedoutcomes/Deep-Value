@@ -6,8 +6,15 @@ import { useAppStore, activeSnapshot } from '../src/store';
 import { colors, space, type } from '../src/theme';
 import { Card, Mono, SectionTitle } from '../src/components/ui';
 import { toggleHaptic } from '../src/haptics';
-import { NETWORK_BLOCKED, PREVIEW_OFFLINE_MESSAGE } from '../src/host';
-import { BUNDLED_META, LIBRARY, LIBRARY_TICKERS } from '../src/library';
+import { HOST, NETWORK_BLOCKED, PREVIEW_OFFLINE_MESSAGE } from '../src/host';
+import { BUNDLED_META, LIBRARY_AS_OF, LIBRARY_TICKERS, UNAVAILABLE } from '../src/library';
+import { UNIVERSE, unsupportedReason } from '@dvh/data';
+
+/** Universe members with no bundled snapshot in this build, and why. */
+const NOT_BUNDLED = UNIVERSE.filter((e) => !LIBRARY_TICKERS.includes(e.ticker)).map((e) => ({
+  ticker: e.ticker,
+  reason: unsupportedReason(e) ?? UNAVAILABLE[e.ticker] ?? 'not in this build',
+}));
 
 export default function SettingsScreen() {
   const devMode = useAppStore((s) => s.devMode);
@@ -82,14 +89,36 @@ export default function SettingsScreen() {
           <Mono size="xs" color={colors.textDim}>{PREVIEW_OFFLINE_MESSAGE}</Mono>
           <View style={{ height: space.sm }} />
           <Mono size="xs" color={colors.textFaint}>
-            Bundled: {LIBRARY_TICKERS.join(' · ')} (snapshots of{' '}
-            {[...new Set(LIBRARY_TICKERS.map((t) => LIBRARY[t]![0]!.snapshotDate))].join(', ')}).
-            META also keeps the sheet's {BUNDLED_META.snapshotDate} snapshot: pin it above to
-            compare.
+            Bundled: {UNIVERSE.length - NOT_BUNDLED.length} of the {UNIVERSE.length} S&P 500 and
+            Nasdaq-100 companies, as of {LIBRARY_AS_OF}: statements from SEC EDGAR filings,
+            prices from Yahoo. Search any of them on the Watchlist. META also keeps the sheet's{' '}
+            {BUNDLED_META.snapshotDate} snapshot: pin it above to compare.
           </Mono>
+          {NOT_BUNDLED.length > 0 && (
+            <>
+              <View style={{ height: space.sm }} />
+              <Mono size="xs" color={colors.textFaint}>
+                Not bundled: {NOT_BUNDLED.map((n) => n.ticker).join(' · ')} (search one for the
+                reason).
+              </Mono>
+            </>
+          )}
         </Card>
       ) : (
       <>
+      <Card>
+        <SectionTitle>Live data</SectionTitle>
+        <Mono size="xs" color={colors.textDim}>
+          {proxyBaseUrl
+            ? 'Through your data proxy (below).'
+            : HOST === 'native'
+              ? 'Free, no key: statements from SEC EDGAR filings, prices from Yahoo. Set a data proxy below to use it instead.'
+              : devFmpApiKey
+                ? 'In this browser: straight from FMP with your dev key (SEC and Yahoo block browser requests).'
+                : 'In a browser, live data needs the data proxy or a dev FMP key (SEC and Yahoo block browser requests). The iPhone app pulls free data with no key.'}
+        </Mono>
+      </Card>
+
       <Card>
         <SectionTitle>Data proxy</SectionTitle>
         <TextInput
@@ -139,9 +168,9 @@ export default function SettingsScreen() {
           </Pressable>
         )}
         <Mono size="xs" color={colors.textFaint}>
-          Stored in the iOS Keychain (this device only), never in the app database. Free tier
-          covers ~5 years of history; the model's 2007+ table needs the Starter plan. Ship
-          production builds with the proxy instead.
+          Only used in a browser with no proxy; the iPhone app doesn't need it. Stored in the iOS
+          Keychain (this device only), never in the app database. Free tier covers ~5 years of
+          history.
         </Mono>
       </Card>
 
@@ -168,6 +197,12 @@ export default function SettingsScreen() {
           provides information and modelling tools only: nothing in this app is investment advice
           or a recommendation to buy or sell any security. Data may be delayed or inaccurate;
           verify before acting. Investing involves risk, including loss of principal.
+        </Mono>
+        <View style={{ height: space.sm }} />
+        <Mono size="xs" color={colors.textFaint}>
+          Data: financial statements from SEC EDGAR XBRL filings (public domain); prices and
+          split history from Yahoo Finance's public chart data, for personal, non-commercial use;
+          index membership from Wikipedia's constituent lists.
         </Mono>
         <View style={{ height: space.sm }} />
         <Pressable

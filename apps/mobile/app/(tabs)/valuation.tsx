@@ -95,9 +95,9 @@ export default function ValuationScreen() {
       inputs,
       implied: impliedExpectations(analysis.anchors, inputs),
       grid: sensitivityGrid(analysis.anchors, inputs),
-      flags: checkAssumptions(analysis, kind, horizon, capexTreatment),
+      flags: checkAssumptions(analysis, kind, horizon, capexTreatment, snapshot?.rows),
     };
-  }, [analysis, kind, horizon, capexTreatment]);
+  }, [analysis, kind, horizon, capexTreatment, snapshot]);
 
   if (!snapshot || !analysis || !lenses) {
     return (
@@ -188,6 +188,8 @@ export default function ValuationScreen() {
     useConventional: () => setCapexTreatment('conventional'),
     useOpMargin: (m: number) =>
       setYearsAll(lenses.inputs.years.map((y) => ({ ...y, operatingMargin: m }))),
+    useFcfMargin: (m: number) =>
+      setYearsAll(lenses.inputs.years.map((y) => ({ ...y, adjFcfMargin: m }))),
   };
 
   return (

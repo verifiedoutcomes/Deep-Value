@@ -17,7 +17,7 @@ import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 import type { DerivedRow, HistoricalRowInput, Maybe, SummaryStats } from '@dvh/engine';
 import { momentumFromHistory, sparklineWindow } from '@dvh/engine';
 import { useTickerAnalysis } from '../../src/analysis';
-import { useRefreshSnapshot } from '../../src/data';
+import { liveSource, useRefreshSnapshot } from '../../src/data';
 import { useAppStore } from '../../src/store';
 import { isLibrarySnapshot } from '../../src/library';
 import { NETWORK_BLOCKED, PREVIEW_OFFLINE_MESSAGE } from '../../src/host';
@@ -107,7 +107,11 @@ export default function CompanyScreen() {
             ? `No bundled snapshot for ${ticker}. ${PREVIEW_OFFLINE_MESSAGE}`
             : refresh.isError
               ? `Refresh failed: ${refresh.error instanceof Error ? refresh.error.message : 'network'}`
-              : `No snapshot for ${ticker} yet — ${refreshHint} to pull live data (needs the data proxy or a dev API key in Settings).`}
+              : liveSource() === 'none'
+                ? `No snapshot for ${ticker} yet. In a browser, live data needs the data proxy (or a dev API key) in Settings.`
+                : liveSource() === 'free'
+                  ? `No snapshot for ${ticker} yet — ${refreshHint} to load it free from SEC filings + Yahoo prices.`
+                  : `No snapshot for ${ticker} yet — ${refreshHint} to pull live data.`}
         </Banner>
       </View>
     );
@@ -217,7 +221,47 @@ export default function CompanyScreen() {
         </View>
         <HistoryTable snapshotRows={snapshot.rows} derived={analysis.derived} summary={analysis.summary} />
       </Card>
+
+      <DataSourceCard source={snapshot.dataSource} notes={snapshot.dataNotes} />
     </ScrollView>
+  );
+}
+
+const FREE_SOURCE = 'free:sec-edgar+yahoo';
+const SOURCE_LABELS: Record<string, string> = {
+  [FREE_SOURCE]: 'SEC EDGAR filings (XBRL) + Yahoo prices',
+  fmp: 'Financial Modeling Prep',
+  'edgar-first': 'SEC EDGAR filings, Financial Modeling Prep for prices',
+};
+
+/** Where the numbers came from, and anything the source couldn't give. */
+function DataSourceCard({ source, notes }: { source?: string; notes?: string[] }) {
+  if (!source && !notes?.length) return null;
+  return (
+    <Card>
+      <SectionTitle>Data source</SectionTitle>
+      {source && (
+        <Mono size="xs" color={colors.textDim}>
+          {SOURCE_LABELS[source] ?? source}
+        </Mono>
+      )}
+      {source === FREE_SOURCE && (
+        <View style={{ marginTop: space.xs }}>
+          <Mono size="xs" color={colors.textFaint}>
+            ROIC, ownership and short interest aren't in public filings or price data, so they
+            show as – for this source. Net debt includes lease liabilities (as the sheet's
+            provider reports it).
+          </Mono>
+        </View>
+      )}
+      {notes?.map((n) => (
+        <View key={n} style={{ marginTop: space.xs }}>
+          <Mono size="xs" color={colors.amber}>
+            • {n}
+          </Mono>
+        </View>
+      ))}
+    </Card>
   );
 }
 
