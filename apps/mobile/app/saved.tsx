@@ -26,6 +26,12 @@ export default function SavedScreen() {
       contentContainerStyle={{ paddingBottom: space.xl }}
       renderItem={({ item }) => {
         const d = item.digest;
+        // saved before store v5: the digest is always the 5-year base case
+        const legacy = d.baseHorizon == null;
+        const fairValue = legacy ? d.fairValue5 ?? null : d.fairValue ?? null;
+        const priceDelta = legacy ? d.priceDelta5 ?? null : d.priceDelta ?? null;
+        const irr = legacy ? d.irr5 ?? null : d.irr ?? null;
+        const hz = d.baseHorizon ?? 5;
         return (
           <Pressable
             style={styles.row}
@@ -52,24 +58,24 @@ export default function SavedScreen() {
             </View>
             <View style={styles.cell}>
               <Mono size="sm">{price(d.price)}</Mono>
-              <Mono size="xs" color={colors.textFaint}>px then</Mono>
+              <Mono size="xs" color={colors.textFaint}>Price then</Mono>
             </View>
             <View style={styles.cell}>
               <Mono size="sm">{ratio(d.evEbit)}</Mono>
-              <Mono size="xs" color={colors.textFaint}>ev/ebit</Mono>
+              <Mono size="xs" color={colors.textFaint}>EV/EBIT</Mono>
             </View>
             <View style={styles.cell}>
               <Mono size="sm" color={colors.accent}>
-                {d.fairValue5 == null ? '–' : price(d.fairValue5)}
+                {fairValue == null ? '–' : price(fairValue)}
               </Mono>
-              <Mono size="xs" color={colors.textFaint}>fair val</Mono>
+              <Mono size="xs" color={colors.textFaint}>Base {hz}y value</Mono>
             </View>
             <View style={[styles.cell, { alignItems: 'flex-end' }]}>
-              <Mono size="sm" color={deltaColor(d.priceDelta5)}>
-                {d.priceDelta5 == null ? '–' : pctSigned(d.priceDelta5, 0)}
+              <Mono size="sm" color={deltaColor(priceDelta)}>
+                {priceDelta == null ? '–' : pctSigned(priceDelta, 0)}
               </Mono>
               <Mono size="xs" color={colors.textFaint}>
-                {d.irr5 == null ? '' : `IRR ${pct(d.irr5, 0)}`}
+                {irr == null ? 'vs price' : `${pct(irr, 0)}/yr`}
               </Mono>
             </View>
           </Pressable>
@@ -79,9 +85,9 @@ export default function SavedScreen() {
         <View style={styles.empty}>
           <Mono size="sm" color={colors.textDim}>No saved analyses yet.</Mono>
           <Mono size="xs" color={colors.textFaint}>
-            Open a company and tap "⌸ save analysis" on the Company or Valuation tab. The full
-            state of both tabs is frozen, so you can revisit the original results any time —
-            even after prices and data move on.
+            Open a company and tap "⌸ Save this analysis" on the Company or Valuation tab. The full
+            state of both tabs is frozen, so you can revisit the original results any time, even
+            after prices and data move on.
           </Mono>
         </View>
       }

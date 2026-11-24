@@ -57,7 +57,7 @@ export function FormulaProvider({ children }: { children: React.ReactNode }) {
                   </View>
                 )}
                 <Pressable style={styles.close} onPress={() => setSpec(null)}>
-                  <Mono size="sm" color={colors.textDim}>close</Mono>
+                  <Mono size="sm" color={colors.textDim}>Close</Mono>
                 </Pressable>
               </ScrollView>
             )}

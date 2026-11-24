@@ -80,6 +80,28 @@ export function irrFormula(
   };
 }
 
+export function moicFormula(
+  v: ScenarioValuation,
+  a: ValuationAnchors,
+  horizon: HorizonYears,
+): FormulaSpec {
+  const fcfSum = v.forecast.reduce((acc, f) => acc + f.adjFcf, 0);
+  return {
+    title: 'Money multiple (MOIC)',
+    cell: 'multiple on invested capital',
+    origin: 'app',
+    formula: "MOIC = (Σ Adj FCF over the horizon + terminal market cap) ÷ today's market cap",
+    steps: [
+      `Σ Adj FCF, ${horizon} years = ${m(fcfSum)}`,
+      `terminal market cap = ${m(v.terminalMarketCap)}`,
+      `today's market cap = ${m(a.snapshotMarketCap)}`,
+      `MOIC = (${m(fcfSum)} + ${m(v.terminalMarketCap)}) ÷ ${m(a.snapshotMarketCap)} = ${v.horizonMoic.toFixed(2)}×`,
+    ],
+    note:
+      'How many times your money comes back over the horizon if you bought the whole company at today\'s price: 1.0× is your money back, 2.0× is doubled. It ignores when the cash arrives; the IRR is the same idea per year, with timing.',
+  };
+}
+
 export function pvOfFcfFormula(
   year: number,
   t: number,

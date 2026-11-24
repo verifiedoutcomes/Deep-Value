@@ -88,7 +88,7 @@ export default function ChecklistScreen() {
             </View>
             <View style={[styles.toggle, item.answer ? styles.yes : styles.no]}>
               <Mono size="xs" bold color={item.answer ? colors.accent : colors.textFaint}>
-                {item.answer ? 'YES' : 'NO'}
+                {item.answer ? 'Yes' : 'No'}
               </Mono>
             </View>
           </Pressable>
@@ -97,7 +97,7 @@ export default function ChecklistScreen() {
         <View style={styles.addRow}>
           <TextInput
             style={styles.addInput}
-            placeholder="add your own question…"
+            placeholder="Add your own question…"
             placeholderTextColor={colors.textFaint}
             value={draft}
             onChangeText={setDraft}
@@ -115,7 +115,7 @@ export default function ChecklistScreen() {
 
         <View style={styles.footer}>
           <Mono size="xs" color={colors.textFaint}>
-            long-press a question to remove it
+            Long-press a question to remove it.
           </Mono>
           <Pressable
             onPress={() =>

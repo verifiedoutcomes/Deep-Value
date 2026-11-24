@@ -13,7 +13,7 @@ import { UNIVERSE, unsupportedReason } from '@dvh/data';
 /** Universe members with no bundled snapshot in this build, and why. */
 const NOT_BUNDLED = UNIVERSE.filter((e) => !LIBRARY_TICKERS.includes(e.ticker)).map((e) => ({
   ticker: e.ticker,
-  reason: unsupportedReason(e) ?? UNAVAILABLE[e.ticker] ?? 'not in this build',
+  reason: unsupportedReason(e) ?? UNAVAILABLE[e.ticker] ?? 'Not in this build',
 }));
 
 export default function SettingsScreen() {
@@ -31,7 +31,7 @@ export default function SettingsScreen() {
   const active = activeSnapshot(tickerState);
   const quotaRemaining = useAppStore((s) => s.quotaRemaining);
   const firstQuote = useAppStore((s) => {
-    const q = s.quotes[0]?.text ?? 'add a quote…';
+    const q = s.quotes[0]?.text ?? 'Add a quote…';
     return q.length > 64 ? `${q.slice(0, 64)}…` : q;
   });
 
@@ -69,17 +69,17 @@ export default function SettingsScreen() {
               }}
             >
               <Mono size="sm" color={isActive ? colors.accent : colors.text}>
-                {s.snapshotDate} · px {s.quote.price.toFixed(2)}
+                {s.snapshotDate} · price ${s.quote.price.toFixed(2)}
               </Mono>
               <Mono size="xs" color={pinned ? colors.amber : colors.textFaint}>
-                {pinned ? 'PINNED' : 'pin'}
+                {pinned ? 'Pinned' : 'Pin'}
               </Mono>
             </Pressable>
           );
         })}
         <Mono size="xs" color={colors.textFaint}>
           Snapshots for the company currently open ({ticker}). Every live refresh persists a
-          timestamped snapshot; pin one to freeze the analysis, unpin to follow the newest pull.
+          timestamped snapshot. Pin one to freeze the analysis; unpin to follow the newest pull.
         </Mono>
       </Card>
 
@@ -143,14 +143,14 @@ export default function SettingsScreen() {
         {quotaRemaining != null && (
           <Mono size="xs" color={quotaRemaining > 0 ? colors.textDim : colors.amber}>
             {quotaRemaining} live ticker update{quotaRemaining === 1 ? '' : 's'} left today ·
-            prices refresh at most every 6h per company
+            Prices refresh at most every 6 hours per company.
           </Mono>
         )}
         <View style={{ height: space.sm }} />
         <SectionTitle>FMP API key (dev only)</SectionTitle>
         <TextInput
           style={styles.input}
-          placeholder={devFmpApiKey ? maskKey(devFmpApiKey) : 'used directly against FMP when no proxy is set'}
+          placeholder={devFmpApiKey ? maskKey(devFmpApiKey) : 'Used directly against FMP when no proxy is set'}
           placeholderTextColor={devFmpApiKey ? colors.textDim : colors.textFaint}
           autoCapitalize="none"
           autoCorrect={false}
@@ -163,7 +163,7 @@ export default function SettingsScreen() {
         {Boolean(devFmpApiKey) && (
           <Pressable onPress={() => void setDevFmpApiKey('')}>
             <Mono size="xs" color={colors.red}>
-              remove key from Keychain
+              Remove key from Keychain
             </Mono>
           </Pressable>
         )}

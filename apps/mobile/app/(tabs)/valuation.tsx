@@ -1,7 +1,7 @@
 /**
  * Valuation screen — the heart of the app, laid out as the sheet is:
  *
- *  - scenario tabs (Bear/Base/Bull) and 5yr/3yr toggle
+ *  - a fixed left rail: Bull/Base/Bear (with each fair value) and 3/5 yr
  *  - fair value / IRR / price Δ results
  *  - the forecast block exactly like sheet rows 61:67 — one row per year
  *    with Revenue, Y/Y Δ (editable), Op Income, Op Margin (editable),
@@ -27,6 +27,7 @@ import {
 } from 'react-native';
 import type {
   CapexTreatment,
+  CompanyAnalysis,
   HorizonYears,
   ImpliedExpectations,
   ImpliedValue,
@@ -39,6 +40,9 @@ import type {
 } from '@dvh/engine';
 import {
   checkAssumptions,
+  computeIrrStrip,
+  computeMarginOfSafety,
+  computeVerdict,
   DEFAULT_DISCOUNT_RATE,
   DEFAULT_MOS_THRESHOLDS,
   derive3yExitMultiple,
@@ -63,12 +67,17 @@ import {
   forecastRevenueFormula,
   impliedFormula,
   irrFormula,
+  moicFormula,
   irrStripFormula,
   pvOfFcfFormula,
   sensitivityFormula,
   targetBuyFormula,
 } from '../../src/formulas';
-import { money, pct, pctSigned, price } from '../../src/format';
+import { money, pct, price } from '../../src/format';
+import { AskAiCard } from '../../src/components/AskAiCard';
+import { buildForecastPrompt, type ParsedForecast } from '../../src/llmPrompt';
+
+const KIND_LABEL: Record<ScenarioKind, string> = { bear: 'Bear', base: 'Base', bull: 'Bull' };
 
 export default function ValuationScreen() {
   const {
@@ -91,13 +100,23 @@ export default function ValuationScreen() {
   const lenses = useMemo(() => {
     if (!analysis) return null;
     const inputs = analysis.scenarioInputs[kind][horizon];
+    // The sheet's strip, margin of safety and verdict use the 5-year
+    // block; here they follow the horizon on screen.
+    const s = analysis.scenarios;
+    const base = s.base[horizon];
     return {
       inputs,
       implied: impliedExpectations(analysis.anchors, inputs),
       grid: sensitivityGrid(analysis.anchors, inputs),
       flags: checkAssumptions(analysis, kind, horizon, capexTreatment, snapshot?.rows),
+      irrStrip: computeIrrStrip(analysis.anchors, base),
+      marginOfSafety: computeMarginOfSafety(
+        base.status === 'ok' ? base.fairValuePerShare : null,
+        overrides.mosThresholds ?? DEFAULT_MOS_THRESHOLDS,
+      ),
+      verdict: computeVerdict(analysis.anchors.price, s.bear[horizon], base, s.bull[horizon]),
     };
-  }, [analysis, kind, horizon, capexTreatment, snapshot]);
+  }, [analysis, kind, horizon, capexTreatment, snapshot, overrides.mosThresholds]);
 
   if (!snapshot || !analysis || !lenses) {
     return (
@@ -177,6 +196,22 @@ export default function ValuationScreen() {
 
   const finalYear = anchors.firstForecastYear + horizon - 1;
 
+  const applyAiForecast = (p: ParsedForecast) => {
+    if (readOnly) return;
+    const hz = p.horizon;
+    const nextYears = { ...overrides.years };
+    const exit5 = { ...overrides.exitMultiple5 };
+    const exit3 = { ...overrides.exitMultiple3 };
+    for (const k of ['bear', 'base', 'bull'] as ScenarioKind[]) {
+      const sc = p.scenarios[k];
+      if (!sc) continue;
+      nextYears[k] = { ...nextYears[k], [hz]: sc.years };
+      if (sc.exitMultiple != null) (hz === 5 ? exit5 : exit3)[k] = sc.exitMultiple;
+    }
+    setOverrides(ticker, { ...overrides, years: nextYears, exitMultiple5: exit5, exitMultiple3: exit3 });
+    if (hz !== horizon) setHorizon(ticker, hz);
+  };
+
   const setYearsAll = (next: typeof years) =>
     patch({ years: { ...overrides.years, [kind]: { ...overrides.years?.[kind], [horizon]: next } } });
   const checkActions = {
@@ -199,50 +234,37 @@ export default function ValuationScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={96}
     >
+    <View style={{ flex: 1, flexDirection: 'row' }}>
+    <ScenarioRail
+      analysis={analysis}
+      kind={kind}
+      horizon={horizon}
+      priceToday={snapshot.quote.price}
+      disabled={readOnly}
+      onKind={(k) => setScenarioTab(ticker, k)}
+      onHorizon={(hz) => setHorizon(ticker, hz)}
+    />
     <ScrollView
       style={{ flex: 1 }}
       contentContainerStyle={{ paddingBottom: space.xl }}
       keyboardShouldPersistTaps="handled"
     >
       <AnalysisBar reviewing={reviewing} />
-      <View style={[styles.toggles, readOnly && { opacity: 0.55 }]}>
-        <View style={{ flexDirection: 'row' }}>
-          {(['bear', 'base', 'bull'] as ScenarioKind[]).map((k) => (
-            <Chip
-              key={k}
-              label={k.toUpperCase()}
-              active={kind === k}
-              tone={k === 'bear' ? 'bad' : k === 'bull' ? 'good' : 'neutral'}
-              onPress={() => {
-                if (readOnly) return;
-                tapHaptic();
-                setScenarioTab(ticker, k);
-              }}
-            />
-          ))}
-        </View>
-        <View style={{ flexDirection: 'row' }}>
-          {([5, 3] as HorizonYears[]).map((hz) => (
-            <Chip
-              key={hz}
-              label={`${hz}yr`}
-              active={horizon === hz}
-              onPress={() => {
-                if (readOnly) return;
-                tapHaptic();
-                setHorizon(ticker, hz);
-              }}
-            />
-          ))}
-        </View>
-      </View>
 
       <ResultCard
         valuation={valuation}
         anchors={anchors}
         horizon={horizon}
+        kind={kind}
         priceToday={snapshot.quote.price}
       />
+      {kind !== 'base' && !hasEdits && !readOnly && valuation.status !== 'no-forecast' && (
+        <Banner>
+          {KIND_LABEL[kind]} starts as a copy of Base, so their values match. Make it a{' '}
+          {kind === 'bear' ? 'downside' : 'upside'} case: edit the boxed inputs below, or fill all
+          three at once with &quot;Ask an AI&quot; further down.
+        </Banner>
+      )}
       <AssumptionChecks
         flags={lenses.flags}
         finalYear={finalYear}
@@ -254,11 +276,11 @@ export default function ValuationScreen() {
       <Card style={{ paddingHorizontal: 0 }}>
         <View style={[styles.assumTitleRow, { paddingHorizontal: space.md }]}>
           <SectionTitle>
-            {horizon}-year {finalYear} forecast · {kind}
+            {KIND_LABEL[kind]} case · {horizon}-year forecast to {finalYear}
           </SectionTitle>
           {hasEdits && !readOnly && (
             <Pressable onPress={resetToSeeded} hitSlop={8}>
-              <Mono size="xs" color={colors.blue}>↺ reset to seeded</Mono>
+              <Mono size="xs" color={colors.blue}>↺ Reset to seeded</Mono>
             </Pressable>
           )}
         </View>
@@ -272,17 +294,26 @@ export default function ValuationScreen() {
         />
         <View style={{ paddingHorizontal: space.md, gap: 4 }}>
           <Mono size="xs" color={colors.textFaint}>
-            boxed cells are yours to edit · tap ⓘ to follow any calculation
+            Boxed cells are yours to edit (use − and + or type a %). Tap ⓘ to see how any number is
+            calculated.
           </Mono>
           <CapexInfoTag />
         </View>
       </Card>
 
+      <AskAiCard
+        readOnly={readOnly}
+        onApply={applyAiForecast}
+        buildPrompt={() =>
+          buildForecastPrompt({ snapshot, analysis, horizon, capexTreatment, discountRate: fcfRate })
+        }
+      />
+
       {/* ---- terminal inputs (sheet N61:N66 block) ---- */}
       <Card>
         <SectionTitle>Terminal value inputs</SectionTitle>
         <NumRow
-          label={`exit EV/EBIT at ${finalYear}`}
+          label={`Exit EV/EBIT multiple in ${finalYear}`}
           value={exitCurrent}
           digits={1}
           info={() =>
@@ -301,14 +332,14 @@ export default function ValuationScreen() {
           }
         />
         <NumRow
-          label="discount rate %"
+          label="Discount rate (%)"
           value={(horizon === 5 ? overrides.discountRate5 : overrides.discountRate3) ?? DEFAULT_DISCOUNT_RATE}
           digits={1}
           scale={100}
           onCommit={(v) => (horizon === 5 ? patch({ discountRate5: v }) : patch({ discountRate3: v }))}
         />
         <NumRow
-          label="adjustment ($M)"
+          label="Adjustment ($M)"
           value={overrides.adjustmentMillions?.[kind]?.[horizon] ?? 0}
           digits={0}
           onCommit={(v) =>
@@ -340,9 +371,9 @@ export default function ValuationScreen() {
       )}
 
       <Card>
-        <SectionTitle>Base-case IRR at price</SectionTitle>
+        <SectionTitle>Base-case return (IRR) if you buy at…</SectionTitle>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {analysis.irrStrip.map((cell) => {
+          {lenses.irrStrip.map((cell) => {
             const isCurrent = Math.abs(cell.price - Math.round(snapshot.quote.price)) < 0.5;
             return (
               <Pressable
@@ -366,11 +397,11 @@ export default function ValuationScreen() {
       <Card>
         <SectionTitle>Margin of safety · target buy</SectionTitle>
         <Mono size="xs" color={colors.textFaint}>
-          target buy = base fair value {price(analysis.verdict.baseFairValue)} × (1 − MoS) — the
-          entry price that bakes in that discount to fair value
+          Target buy price = base fair value {price(lenses.verdict.baseFairValue)} × (1 − margin
+          of safety): the price that builds in that discount. Edit the % on the left.
         </Mono>
         <View style={{ height: space.xs }} />
-        {analysis.marginOfSafety.map((row, i) => (
+        {lenses.marginOfSafety.map((row, i) => (
           <View key={i} style={styles.mosRow}>
             <PctInput
               value={row.threshold}
@@ -388,7 +419,7 @@ export default function ValuationScreen() {
                 spec={() =>
                   targetBuyFormula(
                     row.threshold,
-                    analysis.verdict.baseFairValue,
+                    lenses.verdict.baseFairValue,
                     row.targetBuyPrice,
                   )
                 }
@@ -399,13 +430,13 @@ export default function ValuationScreen() {
       </Card>
 
       <Card>
-        <SectionTitle>Verdict · fair value vs price</SectionTitle>
+        <SectionTitle>Verdict · {horizon}-year fair value of each case</SectionTitle>
         <View style={styles.verdictRow}>
           {(
             [
-              ['Bear', analysis.verdict.bearFairValue],
-              ['Base', analysis.verdict.baseFairValue],
-              ['Bull', analysis.verdict.bullFairValue],
+              ['Bear', lenses.verdict.bearFairValue],
+              ['Base', lenses.verdict.baseFairValue],
+              ['Bull', lenses.verdict.bullFairValue],
             ] as [string, Maybe][]
           ).map(([label, fv]) => (
             <View key={label} style={styles.verdictCell}>
@@ -415,14 +446,17 @@ export default function ValuationScreen() {
                 bold
                 color={fv == null ? colors.textFaint : fv >= snapshot.quote.price ? colors.accent : colors.red}
               >
-                {fv == null ? 'No Forecast' : price(fv)}
+                {fv == null ? 'No forecast' : price(fv)}
               </Mono>
-              <Mono size="xs" color={colors.textDim}>vs {price(analysis.verdict.price)}</Mono>
+              <Mono size="xs" color={colors.textDim}>
+                {fv == null ? ' ' : upsideText(fv / lenses.verdict.price - 1)}
+              </Mono>
             </View>
           ))}
         </View>
       </Card>
     </ScrollView>
+    </View>
     </KeyboardAvoidingView>
     </FormulaProvider>
   );
@@ -430,57 +464,200 @@ export default function ValuationScreen() {
 
 /* ---------------- results ---------------- */
 
+/** "45% above today's price" / "12% below today's price". */
+function upsideText(delta: number): string {
+  if (Math.abs(delta) < 0.005) return "≈ today's price";
+  return `${pct(Math.abs(delta), Math.abs(delta) >= 0.1 ? 0 : 1)} ${delta > 0 ? 'above' : 'below'} price`;
+}
+
 function ResultCard({
   valuation,
   anchors,
   horizon,
+  kind,
   priceToday,
 }: {
   valuation: ScenarioValuation;
   anchors: ValuationAnchors;
   horizon: HorizonYears;
+  kind: ScenarioKind;
   priceToday: number;
 }) {
   if (valuation.status === 'no-forecast') {
     return (
       <Card>
-        <Mono size="lg" color={colors.textFaint}>No Forecast</Mono>
+        <Mono size="lg" color={colors.textFaint}>No forecast yet</Mono>
         <Mono size="xs" color={colors.textFaint}>
-          enter margins below to activate this scenario
+          Enter margins below to value the {KIND_LABEL[kind]} case.
         </Mono>
       </Card>
     );
   }
-  const err = valuation.status === 'num-error';
+  if (valuation.status === 'num-error') {
+    return (
+      <Card style={{ borderColor: colors.red }}>
+        <Mono size="xs" color={colors.textFaint}>
+          Fair value per share · {KIND_LABEL[kind]} case, {horizon} years
+        </Mono>
+        <Mono size="lg" bold color={colors.red}>No valid result</Mono>
+        <Mono size="xs" color={colors.textDim}>
+          With these inputs the company is worth less than nothing at the end of the forecast
+          (or the cash flows can&apos;t be solved for a return). Usually the operating margin or
+          the exit multiple is negative: check them below.
+        </Mono>
+      </Card>
+    );
+  }
+  const delta = valuation.priceDelta;
   return (
     <Card>
-      <View style={styles.resultRow}>
-        <View>
-          <Mono size="xs" color={colors.textFaint}>fair value today</Mono>
+      <Mono size="xs" color={colors.textFaint}>
+        {KIND_LABEL[kind]} case · {horizon}-year forecast
+      </Mono>
+      <View style={[styles.resultRow, { marginTop: 4 }]}>
+        <View style={{ flexShrink: 1 }}>
+          <Mono size="xs" color={colors.textDim}>Fair value per share</Mono>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Mono size="xl" bold color={err ? colors.red : colors.accent}>
-              {err ? '#NUM!' : price(valuation.fairValuePerShare)}
+            <Mono size="xl" bold color={colors.accent}>
+              {price(valuation.fairValuePerShare)}
             </Mono>
-            {!err && <InfoTag spec={() => fairValueFormula(valuation, anchors, horizon)} />}
+            <InfoTag spec={() => fairValueFormula(valuation, anchors, horizon)} />
           </View>
-          <Mono size="xs" color={deltaColor(valuation.priceDelta)}>
-            {err ? 'no IRR root — check the assumptions' : `${pctSigned(valuation.priceDelta)} vs ${price(priceToday)}`}
-          </Mono>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <Mono size="xs" color={colors.textFaint}>IRR</Mono>
+          <Mono size="xs" color={colors.textDim}>Expected return</Mono>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Mono size="xl" bold color={err ? colors.red : colors.text}>
-              {err ? '–' : pct(valuation.irr)}
+            <Mono size="xl" bold color={deltaColor(valuation.irr)}>
+              {pct(valuation.irr)}
             </Mono>
-            {!err && <InfoTag spec={() => irrFormula(valuation, anchors, horizon)} />}
+            <InfoTag spec={() => irrFormula(valuation, anchors, horizon)} />
           </View>
-          <Mono size="xs" color={colors.textDim}>
-            {`${horizon}-yr MOIC ${valuation.horizonMoic.toFixed(2)}×`}
-          </Mono>
+          <Mono size="xs" color={colors.textFaint}>per year (IRR)</Mono>
         </View>
       </View>
+      {delta != null && (
+        <View style={styles.verdictLine}>
+          <Mono size="sm" bold color={deltaColor(delta)}>
+            {delta >= 0 ? '▲' : '▼'} {upsideText(delta)}
+          </Mono>
+          <Mono size="xs" color={colors.textDim}>
+            {delta >= 0
+              ? `Worth more than today's ${price(priceToday)}: potentially undervalued in this case.`
+              : `Worth less than today's ${price(priceToday)}: overvalued in this case.`}
+          </Mono>
+        </View>
+      )}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+        <Mono size="xs" color={colors.textDim}>
+          Money multiple (MOIC): {valuation.horizonMoic.toFixed(2)}× in {horizon} years
+        </Mono>
+        <InfoTag spec={() => moicFormula(valuation, anchors, horizon)} />
+      </View>
     </Card>
+  );
+}
+
+/* ---------------- the scenario rail ---------------- */
+
+const RAIL: { kind: ScenarioKind; tone: string }[] = [
+  { kind: 'bull', tone: colors.accent },
+  { kind: 'base', tone: colors.blue },
+  { kind: 'bear', tone: colors.red },
+];
+
+/** Compact price for the rail: whole dollars, cents under $100. */
+function railPrice(v: Maybe): string {
+  if (v == null) return '–';
+  if (Math.abs(v) >= 100_000) return `$${Math.round(v / 1000)}k`;
+  return Math.abs(v) >= 100 ? `$${Math.round(v)}` : `$${v.toFixed(2)}`;
+}
+
+/**
+ * Always-visible left rail: Bull/Base/Bear with each case's fair value
+ * (green above today's price, red below), then the 3/5-year switch.
+ */
+function ScenarioRail({
+  analysis,
+  kind,
+  horizon,
+  priceToday,
+  disabled,
+  onKind,
+  onHorizon,
+}: {
+  analysis: CompanyAnalysis;
+  kind: ScenarioKind;
+  horizon: HorizonYears;
+  priceToday: number;
+  disabled: boolean;
+  onKind: (k: ScenarioKind) => void;
+  onHorizon: (h: HorizonYears) => void;
+}) {
+  return (
+    <View style={[styles.rail, disabled && { opacity: 0.55 }]}>
+      <Mono size="xs" color={colors.textFaint}>Case</Mono>
+      {RAIL.map(({ kind: k, tone }) => {
+        const v = analysis.scenarios[k][horizon];
+        const fv = v.status === 'ok' ? v.fairValuePerShare : null;
+        const active = kind === k;
+        return (
+          <Pressable
+            key={k}
+            onPress={() => {
+              if (disabled) return;
+              tapHaptic();
+              onKind(k);
+            }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={`${KIND_LABEL[k]} case, fair value ${railPrice(fv)}`}
+            style={[
+              styles.railBtn,
+              active && { borderColor: tone, borderLeftColor: tone, backgroundColor: colors.surfaceAlt },
+            ]}
+          >
+            <Mono size="sm" bold color={active ? tone : colors.textDim}>
+              {KIND_LABEL[k]}
+            </Mono>
+            <Mono
+              size="xs"
+              color={fv == null ? colors.textFaint : fv >= priceToday ? colors.accent : colors.red}
+            >
+              {railPrice(fv)}
+            </Mono>
+          </Pressable>
+        );
+      })}
+      <View style={styles.railDivider} />
+      <Mono size="xs" color={colors.textFaint}>Years</Mono>
+      {([3, 5] as HorizonYears[]).map((hz) => {
+        const active = horizon === hz;
+        return (
+          <Pressable
+            key={hz}
+            onPress={() => {
+              if (disabled) return;
+              tapHaptic();
+              onHorizon(hz);
+            }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={`${hz}-year forecast`}
+            style={[
+              styles.railBtn,
+              active && { borderColor: colors.text, borderLeftColor: colors.text, backgroundColor: colors.surfaceAlt },
+            ]}
+          >
+            <Mono size="sm" bold={active} color={active ? colors.text : colors.textDim}>
+              {hz} yr
+            </Mono>
+          </Pressable>
+        );
+      })}
+      <View style={{ flex: 1 }} />
+      <Mono size="xs" color={colors.textFaint}>Today</Mono>
+      <Mono size="xs" color={colors.textDim}>{railPrice(priceToday)}</Mono>
+    </View>
   );
 }
 
@@ -506,7 +683,7 @@ function ImpliedCard({
 }) {
   const rows: { label: string; implied: string; yours: string; cushion: boolean | null }[] = [
     {
-      label: 'revenue growth / yr',
+      label: 'Revenue growth / yr',
       implied: impliedText(implied.revenueGrowth, (x) => pct(x), '< −50%', '> 100%'),
       yours: pct(implied.scenarioGrowthCagr),
       cushion:
@@ -519,7 +696,7 @@ function ImpliedCard({
               : null,
     },
     {
-      label: 'exit EV/EBIT',
+      label: 'Exit EV/EBIT',
       implied: impliedText(implied.exitMultiple, (x) => `${x.toFixed(1)}×`, '< 0×', 'n/a'),
       yours: `${implied.scenarioExitMultiple.toFixed(1)}×`,
       cushion:
@@ -534,17 +711,17 @@ function ImpliedCard({
     <Card>
       <View style={styles.assumTitleRow}>
         <SectionTitle>
-          Priced in at {price(priceToday)} · {kind} {horizon}yr
+          What {price(priceToday)} prices in · {KIND_LABEL[kind]}, {horizon} yr
         </SectionTitle>
         <InfoTag spec={info} />
       </View>
       <View style={styles.impHead}>
         <View style={{ flex: 1 }} />
         <View style={styles.impCol}>
-          <Mono size="xs" color={colors.textFaint}>implied</Mono>
+          <Mono size="xs" color={colors.textFaint}>Priced in</Mono>
         </View>
         <View style={styles.impCol}>
-          <Mono size="xs" color={colors.textFaint}>yours</Mono>
+          <Mono size="xs" color={colors.textFaint}>Yours</Mono>
         </View>
       </View>
       {rows.map((r) => (
@@ -567,8 +744,8 @@ function ImpliedCard({
         </View>
       ))}
       <Mono size="xs" color={colors.textFaint}>
-        what today's price already pays for, each holding the rest of this scenario fixed ·
-        green = the market asks less than you assume
+        What today&apos;s price already assumes, changing one input at a time and holding the rest of
+        this case fixed. Green: the market expects less than you do.
       </Mono>
     </Card>
   );
@@ -597,7 +774,7 @@ function SensitivityCard({
       </View>
       <View style={styles.sensRow}>
         <View style={styles.sensLabel}>
-          <Mono size="xs" color={colors.textFaint}>rate</Mono>
+          <Mono size="xs" color={colors.textFaint}>Rate</Mono>
         </View>
         {grid.exitMultiples.map((x, c) => (
           <View key={c} style={styles.sensCell}>
@@ -642,7 +819,8 @@ function SensitivityCard({
         </View>
       ))}
       <Mono size="xs" color={colors.textFaint}>
-        centre = your inputs · green ≥ today's {price(priceToday)}, red below
+        Rows: discount rate. Columns: exit multiple. The outlined centre is your inputs. Green is
+        at or above today&apos;s {price(priceToday)}, red below.
       </Mono>
     </Card>
   );
@@ -680,7 +858,7 @@ function ForecastTable({
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         {/* Rev Y/Y — editable */}
-        <FCol title="Rev Y/Y ∆" editable>
+        <FCol title="Rev growth" editable>
           {f.map((row, t) => (
             <View key={t} style={styles.frow}>
               <MiniPct value={years[t]!.revenueYoY} onCommit={(v) => setYear(t, 'revenueYoY', v)} />
@@ -707,7 +885,7 @@ function ForecastTable({
           ))}
         </FCol>
         {/* Op margin — editable */}
-        <FCol title="Op Margin" editable>
+        <FCol title="Op margin" editable>
           {f.map((_row, t) => (
             <View key={t} style={styles.frow}>
               <MiniPct
@@ -718,7 +896,7 @@ function ForecastTable({
           ))}
         </FCol>
         {/* Op income — computed */}
-        <FCol title="Op Income">
+        <FCol title="Op income">
           {f.map((row, t) => (
             <View key={t} style={[styles.frow, styles.fcomputed]}>
               <Mono size="xs">{money(row.operatingIncome)}</Mono>
@@ -726,7 +904,7 @@ function ForecastTable({
           ))}
         </FCol>
         {/* FCF margin — editable */}
-        <FCol title="Adj FCF Mgn" editable>
+        <FCol title="Adj FCF margin" editable>
           {f.map((_row, t) => (
             <View key={t} style={styles.frow}>
               <MiniPct
@@ -892,11 +1070,39 @@ function NumRow({
 }
 
 const styles = StyleSheet.create({
-  toggles: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: space.md,
+  rail: {
+    width: 64,
+    paddingTop: space.md,
+    paddingBottom: space.md,
+    paddingHorizontal: 5,
+    gap: 6,
+    alignItems: 'stretch',
+    borderRightColor: colors.border,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    backgroundColor: colors.bg,
+  },
+  railBtn: {
+    alignItems: 'center',
+    borderWidth: 1,
+    borderLeftWidth: 4,
+    borderColor: colors.border,
+    borderLeftColor: colors.border,
+    borderRadius: 6,
+    paddingVertical: 8,
+    backgroundColor: colors.chipBg,
+    gap: 2,
+  },
+  railDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginVertical: space.xs,
+  },
+  verdictLine: {
+    marginTop: space.sm,
     paddingTop: space.sm,
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 2,
   },
   resultRow: { flexDirection: 'row', justifyContent: 'space-between' },
   assumTitleRow: {

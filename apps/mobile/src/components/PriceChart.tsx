@@ -24,7 +24,7 @@ export function PriceChart({
 }) {
   const window = history.slice(Math.max(0, history.length - LOOKBACK_WEEKS));
   if (window.length < 2) {
-    return <Mono color={colors.textDim}>price history unavailable</Mono>;
+    return <Mono color={colors.textDim}>Price history unavailable</Mono>;
   }
   // 52-week range from the full history (helper looks back from the last date)
   const { high, low } = fiftyTwoWeekRange(history);

@@ -48,12 +48,19 @@ export interface Env {
    * Raise it later without an app update. Default 5.
    */
   DAILY_TICKER_QUOTA?: string;
+  /**
+   * Contact for the User-Agent SEC asks every client to send, e.g.
+   * "contact: you@example.com". Set it as a Worker variable (wrangler.toml
+   * [vars] or the dashboard) so no address lives in this public repo.
+   */
+  EDGAR_CONTACT?: string;
 }
 
 const FMP_ORIGIN = 'https://financialmodelingprep.com';
 const EDGAR_ORIGIN = 'https://data.sec.gov';
-// SEC asks for a descriptive UA with contact info; change to your own.
-const EDGAR_UA = 'DeepValueHunter/0.1 (contact: maxpeel9@gmail.com)';
+// SEC asks for a descriptive UA with contact info: set EDGAR_CONTACT.
+const edgarUa = (env: Env) =>
+  `DeepValueHunter/0.1 (${env.EDGAR_CONTACT || 'contact: deepvaluehunter@example.com'})`;
 
 const LONG_TTL = 30 * 24 * 3600; // closed fiscal years are immutable
 const SHORT_TTL = 60;
@@ -279,7 +286,7 @@ async function handleEdgar(env: Env, ticker: string): Promise<Response> {
   return cachedFetch(env, `edgar:companyfacts:${ticker}`, LONG_TTL, async () => {
     const mapRes = await cachedFetch(env, 'edgar:tickermap', LONG_TTL, () =>
       fetch('https://www.sec.gov/files/company_tickers.json', {
-        headers: { 'User-Agent': EDGAR_UA },
+        headers: { 'User-Agent': edgarUa(env) },
       }),
     );
     const map = (await mapRes.json()) as Record<string, { cik_str: number; ticker: string }>;
@@ -287,7 +294,7 @@ async function handleEdgar(env: Env, ticker: string): Promise<Response> {
     if (!entry) return new Response('unknown ticker', { status: 404 });
     const cik = String(entry.cik_str).padStart(10, '0');
     return fetch(`${EDGAR_ORIGIN}/api/xbrl/companyfacts/CIK${cik}.json`, {
-      headers: { 'User-Agent': EDGAR_UA },
+      headers: { 'User-Agent': edgarUa(env) },
     });
   });
 }

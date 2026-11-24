@@ -11,7 +11,13 @@ import {
   type ScenarioOverrides,
 } from '@dvh/engine';
 import type { CapexTreatment, HorizonYears, ScenarioKind } from '@dvh/engine';
-import { activeSnapshot, useAppStore, type SavedAnalysis, type TickerState } from './store';
+import {
+  activeSnapshot,
+  DEFAULT_HORIZON,
+  useAppStore,
+  type SavedAnalysis,
+  type TickerState,
+} from './store';
 import { APP_ANALYZE_OPTIONS } from './engineOptions';
 
 export { APP_ANALYZE_OPTIONS };
@@ -42,7 +48,7 @@ export function useTickerAnalysis(tickerOverride?: string): TickerAnalysis {
   const snapshot = reviewing ? reviewing.snapshot : activeSnapshot(state);
   const overrides = reviewing ? reviewing.overrides : state?.overrides ?? {};
   const capexTreatment = reviewing ? reviewing.capexTreatment : liveCapex;
-  const horizon = reviewing ? reviewing.horizon : state?.horizon ?? 5;
+  const horizon = reviewing ? reviewing.horizon : state?.horizon ?? DEFAULT_HORIZON;
   const scenarioTab = reviewing ? reviewing.scenarioTab : state?.scenarioTab ?? 'base';
 
   // App mode: true 3-year discounting (not the sheet's nper=5 quirk) and

@@ -32,11 +32,11 @@ export function AnalysisBar({ reviewing }: { reviewing: SavedAnalysis | null }) 
             SAVED ANALYSIS · {reviewing.ticker} · {when}
           </Mono>
           <Mono size="xs" color={colors.textDim}>
-            original results, read-only — edits are disabled
+            Original results, read-only: edits are disabled.
           </Mono>
           {reviewing.capexTreatment === 'sheet' && (
             <Mono size="xs" color={colors.amber}>
-              saved before the capex fix: Adj FCF added capex back
+              Saved before the capex fix: Adj FCF added capex back.
             </Mono>
           )}
         </View>
@@ -55,7 +55,7 @@ export function AnalysisBar({ reviewing }: { reviewing: SavedAnalysis | null }) 
           hitSlop={8}
           style={styles.action}
         >
-          <Mono size="xs" color={colors.red}>delete</Mono>
+          <Mono size="xs" color={colors.red}>Delete</Mono>
         </Pressable>
         <Pressable
           onPress={() => {
@@ -65,7 +65,7 @@ export function AnalysisBar({ reviewing }: { reviewing: SavedAnalysis | null }) 
           hitSlop={8}
           style={styles.action}
         >
-          <Mono size="xs" color={colors.accent} bold>exit ✕</Mono>
+          <Mono size="xs" color={colors.accent} bold>Exit ✕</Mono>
         </Pressable>
       </View>
     );
@@ -81,7 +81,7 @@ export function AnalysisBar({ reviewing }: { reviewing: SavedAnalysis | null }) 
     successHaptic();
     showAlert(
       'Analysis saved',
-      'Company + Valuation frozen as of now. Revisit it anytime from ⌸ Saved on the Watchlist.',
+      'Company and Valuation are frozen as of now. Revisit them any time from ⌸ Saved on the Watchlist.',
       [
         { text: 'Stay here', style: 'cancel' },
         {
@@ -95,7 +95,7 @@ export function AnalysisBar({ reviewing }: { reviewing: SavedAnalysis | null }) 
   return (
     <View style={styles.bar}>
       <Pressable onPress={onSave} hitSlop={8} style={styles.saveBtn}>
-        <Mono size="sm" color={colors.accent} bold>⌸ save analysis</Mono>
+        <Mono size="sm" color={colors.accent} bold>⌸ Save this analysis</Mono>
       </Pressable>
       <Pressable
         onPress={() => {
@@ -106,7 +106,7 @@ export function AnalysisBar({ reviewing }: { reviewing: SavedAnalysis | null }) 
         style={styles.savedBtn}
       >
         <Mono size="sm" color={savedCount > 0 ? colors.blue : colors.textDim} bold>
-          saved ({savedCount})
+          Saved ({savedCount})
         </Mono>
       </Pressable>
     </View>

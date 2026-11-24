@@ -47,7 +47,7 @@ export function CapexInfoTag({ compact = false }: { compact?: boolean }) {
             <View style={styles.head}>
               <Mono size="md" bold>Capex treatment</Mono>
               <View style={styles.cellRef}>
-                <Mono size="xs" color={colors.amber}>sheet K · corrected</Mono>
+                <Mono size="xs" color={colors.amber}>Sheet K · corrected</Mono>
               </View>
             </View>
             <View style={{ flexDirection: 'row', marginBottom: space.sm, flexWrap: 'wrap', gap: 4 }}>
@@ -88,7 +88,7 @@ export function CapexInfoTag({ compact = false }: { compact?: boolean }) {
               analyses saved before the fix still replay their original numbers.
             </Mono>
             <Pressable style={styles.close} onPress={() => setOpen(false)}>
-              <Mono size="sm" color={colors.textDim}>close</Mono>
+              <Mono size="sm" color={colors.textDim}>Close</Mono>
             </Pressable>
           </Pressable>
         </Pressable>

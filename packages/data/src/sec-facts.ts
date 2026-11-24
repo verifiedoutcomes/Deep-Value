@@ -89,7 +89,9 @@ export const TAGS = {
     'PaymentsToAcquireProductiveAssets',
     'PaymentsForCapitalImprovements',
     'PaymentsToAcquireOtherPropertyPlantAndEquipment',
-    // sector-specific capex lines, used only when none of the above exist
+  ],
+  // sector-specific capex lines, used only when none of the above exist
+  capexFallback: [
     'PaymentsToExploreAndDevelopOilAndGasProperties',
     'PaymentsForConstructionInProcess',
     'PaymentsToDevelopRealEstateAssets',
@@ -370,6 +372,8 @@ function flowFields(
   revenue: Maybe,
   /** TTM only: the fiscal year's interest, for when the 10-Qs don't tag it. */
   fiscalYearInterest: Maybe = null,
+  /** TTM only: the fiscal year's D&A, the reference for picking capex. */
+  fiscalYearDa: Maybe = null,
 ) {
   // Not reported as a line: pre-tax income + interest expense is the
   // standard EBIT proxy; "revenue − total costs" comes last because what
@@ -408,12 +412,8 @@ function flowFields(
       note('Operating income derived as revenue − total costs and expenses: not reported as a line');
     }
   }
-  const capexOut = get(TAGS.capex);
-  // the most inclusive D&A line (the cash-flow add-back) among variants
-  const daCandidates = TAGS.da.map((t) => get([t])).filter((v): v is number => v != null);
-  const dep = get(TAGS.depreciation);
-  if (dep != null) daCandidates.push(dep + (get(TAGS.amortization) ?? 0));
-  const da = daCandidates.length ? Math.max(...daCandidates) : null;
+  const da = daFrom(get);
+  const capexOut = pickCapex(get, da ?? fiscalYearDa);
   let grossProfit = get(TAGS.grossProfit);
   if (grossProfit == null && revenue != null) {
     const cogs = get(TAGS.costOfRevenue);
@@ -433,6 +433,70 @@ function flowFields(
 }
 
 type Flows = ReturnType<typeof flowFields>;
+
+/**
+ * Capex: the first standard tag, unless it is a sub-line. United Rentals
+ * tags $0.2B of non-rental PP&E beside $2.4B of fleet purchases, and
+ * Fidelity National $0.1B of PP&E beside $0.8B including capitalised
+ * software. A capex line under half of D&A, or under a fifth of a larger
+ * standard total that operating cash flow could fund, gives way to that
+ * total (or to PP&E + "other" PP&E, which only add up together). The larger line is NOT taken by default: for
+ * Williams and SBA it bundles acquisitions ($5.6B vs $2.6B of capex).
+ * Sector-specific lines count only when no standard one exists.
+ */
+const PPE_PLUS_OTHER = 'PaymentsToAcquirePropertyPlantAndEquipment+Other';
+
+/** One period's capex from one source (a tag, or PP&E + other PP&E). */
+function capexFrom(get: FlowGetter, source: string): Maybe {
+  if (source === PPE_PLUS_OTHER) {
+    const [ppe, , , otherPpe] = TAGS.capex.map((t) => get([t]));
+    return ppe != null && otherPpe != null ? Math.abs(ppe) + Math.abs(otherPpe) : null;
+  }
+  const v = get([source]);
+  return v == null ? null : Math.abs(v);
+}
+
+/*
+ * Decided per period, deliberately not anchored on one tag for all
+ * years (as revenue is): tags change meaning over time, and anchoring
+ * on the latest year's tag cut Verizon's 2009–2014 capex from ~$17B to
+ * under $6B. The cost: PACCAR's lease-fleet purchases count in 2009–2018,
+ * when its PP&E line was under half of D&A, and not since.
+ */
+function pickCapex(get: FlowGetter, da: Maybe): Maybe {
+  const lines: number[] = [];
+  for (const t of TAGS.capex) {
+    const v = capexFrom(get, t);
+    if (v != null) lines.push(v);
+  }
+  if (lines.length === 0) {
+    for (const t of TAGS.capexFallback) {
+      const v = capexFrom(get, t);
+      if (v != null) return v;
+    }
+    return null;
+  }
+  const first = lines[0]!;
+  const sum = capexFrom(get, PPE_PLUS_OTHER);
+  const largest = Math.max(...lines, sum ?? 0);
+  // A sub-line: under half of D&A; or under a fifth of a total that the
+  // year's operating cash flow could fund (URI's D&A tag holds only
+  // non-rental depreciation). A total beyond the cash flow bundles
+  // acquisitions: Williams' 2014 line was $20.8B against $4.0B of capex.
+  const ocf = get(TAGS.operatingCashFlow);
+  const subLine =
+    (da != null && first < 0.5 * Math.abs(da)) ||
+    (largest >= 5 * first && ocf != null && largest <= Math.abs(ocf));
+  return largest > first && subLine ? largest : first;
+}
+
+/** The most inclusive D&A line (the cash-flow add-back) among variants. */
+function daFrom(get: FlowGetter): Maybe {
+  const candidates = TAGS.da.map((t) => get([t])).filter((v): v is number => v != null);
+  const dep = get(TAGS.depreciation);
+  if (dep != null) candidates.push(dep + (get(TAGS.amortization) ?? 0));
+  return candidates.length ? Math.max(...candidates) : null;
+}
 
 /** Gaps in the cash-flow lines that free cash flow needs. */
 function settleCashFlowGaps(flows: Flows, note: Note): Flows {
@@ -650,7 +714,10 @@ export function extractAnnuals(
     const end = ends.get(label)!;
     const get = getterFor(label);
     const note = periodNote(notes, label);
-    const flows = settleCashFlowGaps(flowFields(get, bankLike, note, revenueByLabel.get(label) ?? null), note);
+    const flows = settleCashFlowGaps(
+      flowFields(get, bankLike, note, revenueByLabel.get(label) ?? null),
+      note,
+    );
     if (flows.revenue == null && flows.netIncome == null) continue;
     const bal = balanceFields((tags) => firstInstant(docs, tags, end));
     const sharesDated = sharesAtYearEnd(docs, label, end);
@@ -738,7 +805,14 @@ export function extractTtm(
     return null;
   };
   const ttmNote = periodNote(notes, 'TTM');
-  const rolled = flowFields(roll, bankLike, ttmNote, ttmRevenue, fyGet(TAGS.interest));
+  const rolled = flowFields(
+    roll,
+    bankLike,
+    ttmNote,
+    ttmRevenue,
+    fyGet(TAGS.interest),
+    latest.depreciationAmortization,
+  );
   if (rolled.revenue == null || rolled.netIncome == null) {
     return { ...base, asOf: fyEnd, priorTtmRevenue: prior?.revenue ?? null, sharesDated };
   }

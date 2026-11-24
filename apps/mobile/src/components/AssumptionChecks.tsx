@@ -41,7 +41,7 @@ function describe(f: AssumptionFlag, finalYear: number, act: CheckActions): Line
               : 'Check the TTM cash flow for one-off working-capital inflows or asset-sale proceeds.'),
         action:
           f.treatment === 'owner'
-            ? { label: 'use standard FCF', run: act.useConventional }
+            ? { label: 'Use standard FCF', run: act.useConventional }
             : undefined,
       };
     case 'high-growth':
@@ -51,7 +51,7 @@ function describe(f: AssumptionFlag, finalYear: number, act: CheckActions): Line
           `Revenue reaches ${f.revenueMultiple.toFixed(1)}× TTM in ${f.years} years. ` +
           `Few companies sustain growth above ${pct(HIGH_GROWTH, 0)} for long, and past growth barely predicts future growth.`,
         action: {
-          label: `fade to ${pct(FADE_TO_GROWTH, 0)} by ${finalYear}`,
+          label: `Fade to ${pct(FADE_TO_GROWTH, 0)} by ${finalYear}`,
           run: act.fadeGrowth,
         },
       };
@@ -64,7 +64,7 @@ function describe(f: AssumptionFlag, finalYear: number, act: CheckActions): Line
           `${cur != null ? ` (today ${cur.toFixed(1)}×` : ' ('}; the long-run market is about 15–20×).`,
         action:
           cur != null && cur > 0 && cur < f.exitMultiple
-            ? { label: `use today's ${cur.toFixed(1)}×`, run: () => act.useMultiple(cur) }
+            ? { label: `Use today's ${cur.toFixed(1)}×`, run: () => act.useMultiple(cur) }
             : undefined,
       };
     }
@@ -78,7 +78,7 @@ function describe(f: AssumptionFlag, finalYear: number, act: CheckActions): Line
           'A terminal value of operating income × multiple means little until margins normalise.',
         action:
           avg != null && avg > 0 && (f.ttmOpMargin == null || avg > f.ttmOpMargin)
-            ? { label: `use 4-yr avg margin ${pct(avg)}`, run: () => act.useOpMargin(avg) }
+            ? { label: `Use 4-yr average margin ${pct(avg)}`, run: () => act.useOpMargin(avg) }
             : undefined,
       };
     }
@@ -92,7 +92,7 @@ function describe(f: AssumptionFlag, finalYear: number, act: CheckActions): Line
           'terminal value alone. Enter FCF margins yourself' +
           (k ? `, or start from ${k.year ? `FY${k.year}` : 'the last known year'}'s ${pct(k.margin)}.` : '.'),
         action: k
-          ? { label: `use ${k.year ? `FY${k.year}` : 'last known'} FCF margin ${pct(k.margin)}`, run: () => act.useFcfMargin(k.margin) }
+          ? { label: `Use ${k.year ? `FY${k.year}` : 'last known'} FCF margin ${pct(k.margin)}`, run: () => act.useFcfMargin(k.margin) }
           : undefined,
       };
     }
@@ -113,7 +113,7 @@ export function AssumptionChecks({
   if (flags.length === 0) {
     return (
       <View style={styles.clean}>
-        <Mono size="xs" color={colors.textFaint}>✓ assumption check: no red flags</Mono>
+        <Mono size="xs" color={colors.textFaint}>✓ Assumption check: no red flags</Mono>
       </View>
     );
   }
@@ -143,7 +143,7 @@ export function AssumptionChecks({
         );
       })}
       <Mono size="xs" color={colors.textFaint}>
-        flags change nothing until you tap a fix · ↺ reset to seeded undoes forecast fixes
+        Flags change nothing until you tap a fix. ↺ Reset to seeded undoes forecast fixes.
       </Mono>
     </Card>
   );

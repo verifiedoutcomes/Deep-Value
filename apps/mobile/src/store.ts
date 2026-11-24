@@ -56,9 +56,15 @@ export interface SavedAnalysis {
     peLive: number | null;
     evEbit: number | null;
     fcfYield: number | null;
-    fairValue5: number | null;
-    irr5: number | null;
-    priceDelta5: number | null;
+    /** Base case at the horizon the analysis was saved on. */
+    baseHorizon?: HorizonYears;
+    fairValue?: number | null;
+    irr?: number | null;
+    priceDelta?: number | null;
+    /** Saved before store v5: always the 5-year base case. */
+    fairValue5?: number | null;
+    irr5?: number | null;
+    priceDelta5?: number | null;
   };
 }
 
@@ -167,11 +173,14 @@ interface AppState {
 const baselineChecklist = (): ChecklistItem[] =>
   CHECKLIST_QUESTIONS.map((question) => ({ question, answer: false }));
 
+/** The horizon a company's Valuation opens on (3 years since store v5). */
+export const DEFAULT_HORIZON = 3 as const;
+
 const emptyTicker = (): TickerState => ({
   snapshots: [],
   overrides: {},
   checklist: baselineChecklist(),
-  horizon: 5,
+  horizon: DEFAULT_HORIZON,
   scenarioTab: 'base',
 });
 
@@ -231,7 +240,7 @@ export const useAppStore = create<AppState>()(
         const snapshot = activeSnapshot(state);
         if (!state || !snapshot) return { error: `no data loaded for ${ticker}` };
         const analysis = analyzeCompany(snapshot, state.overrides, s.capexTreatment, APP_ANALYZE_OPTIONS);
-        const base5 = analysis.scenarios.base[5];
+        const base = analysis.scenarios.base[state.horizon];
         const savedAt = new Date().toISOString();
         const entry: SavedAnalysis = {
           id: `${ticker}-${Date.now()}`,
@@ -248,9 +257,10 @@ export const useAppStore = create<AppState>()(
             peLive: analysis.header.peLiveCap,
             evEbit: analysis.header.evOverOperatingIncome,
             fcfYield: analysis.header.adjFcfYield,
-            fairValue5: base5.status === 'ok' ? base5.fairValuePerShare : null,
-            irr5: base5.status === 'ok' ? base5.irr : null,
-            priceDelta5: base5.status === 'ok' ? base5.priceDelta : null,
+            baseHorizon: state.horizon,
+            fairValue: base.status === 'ok' ? base.fairValuePerShare : null,
+            irr: base.status === 'ok' ? base.irr : null,
+            priceDelta: base.status === 'ok' ? base.priceDelta : null,
           },
         };
         set({ savedAnalyses: [entry, ...s.savedAnalyses].slice(0, MAX_SAVED_ANALYSES) });
@@ -411,7 +421,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'dvh-state-v1',
-      version: 4,
+      version: 5,
       migrate: (persisted, version) => {
         const state = persisted as AppState & { watchlist?: string[] };
         if (version < 2) {
@@ -444,6 +454,15 @@ export const useAppStore = create<AppState>()(
           // SBC); everyone moves to the corrected OCF − |capex| − SBC.
           // Saved analyses keep their original treatment, as frozen.
           state.capexTreatment = 'conventional';
+        }
+        if (version < 5) {
+          // The Valuation tab now opens on 3 years. Every ticker stored 5
+          // because that was the only default (the toggle can't tell a
+          // choice from the default), so each moves once; saved analyses
+          // keep the horizon they were frozen with.
+          for (const t of Object.values(state.tickers ?? {})) {
+            if (t.horizon === 5) t.horizon = DEFAULT_HORIZON;
+          }
         }
         return state;
       },

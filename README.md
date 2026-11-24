@@ -105,6 +105,10 @@ npx wrangler secret put FMP_API_KEY
 npx wrangler deploy                       # note the workers.dev URL
 ```
 
+Set the Worker variable `EDGAR_CONTACT` (e.g. `contact: you@example.com`)
+in the dashboard or `wrangler.toml` `[vars]`: SEC asks every client for a
+contact, and keeping it out of the code keeps it out of this public repo.
+
 Then set that URL as `extra.proxyBaseUrl` in `apps/mobile/app.json` (or at
 runtime in the app's Settings).
 
@@ -126,6 +130,12 @@ a banner offering a live refresh. Four screens + settings: Watchlist,
 Company (summary card, ownership strip, price chart, scrollable historical
 table with sparklines), Valuation (scenario editor, fair value/IRR,
 IRR-at-price strip, margin of safety, verdict), Checklist.
+
+Valuation opens on the 3-year forecast. A rail on the left switches
+Bull/Base/Bear (each with its fair value) and 3/5 years. "Ask an AI for the
+forecast" copies a prompt with the company's ten-year history and the
+model's mechanics into any chat AI, then reads the JSON its answer ends
+with back into all three cases (DECISIONS.md §60).
 
 Adjusted FCF is `OCF − |capex| − SBC` everywhere in the app. The original
 sheet's `K = H − I − J` added capex back, because capex is stored negative;

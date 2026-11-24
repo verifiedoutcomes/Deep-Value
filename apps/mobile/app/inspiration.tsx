@@ -68,7 +68,7 @@ export default function InspirationScreen() {
         <View style={styles.composer}>
           <TextInput
             style={[styles.input, styles.quoteInput]}
-            placeholder="add a quote…"
+            placeholder="Add a quote…"
             placeholderTextColor={colors.textFaint}
             value={draft}
             onChangeText={setDraft}
@@ -77,7 +77,7 @@ export default function InspirationScreen() {
           <View style={{ flexDirection: 'row', gap: space.sm }}>
             <TextInput
               style={[styles.input, { flex: 1 }]}
-              placeholder="attribution (e.g. Warren Buffett)"
+              placeholder="Attribution (e.g. Warren Buffett)"
               placeholderTextColor={colors.textFaint}
               value={who}
               onChangeText={setWho}
@@ -93,7 +93,7 @@ export default function InspirationScreen() {
             </Pressable>
           </View>
           <Mono size="xs" color={colors.textFaint}>
-            long-press a quote to remove it
+            Long-press a quote to remove it.
           </Mono>
         </View>
       </ScrollView>

@@ -42,27 +42,27 @@ interface ColumnSpec {
 
 /** All the sheet's columns (D..AB), grouped for readability. */
 const COLUMNS: ColumnSpec[] = [
-  { key: 'rev', title: 'Revenue', value: (r) => r.revenue, fmt: money, summary: (s) => s.revenueCagr8, summaryFmt: pct, summaryLabel: '8y cagr' },
-  { key: 'yoy', title: 'Y/Y Δ', value: (_r, d) => d.revenueYoY, fmt: pctSigned, summary: (s) => s.revenueYoyAvg4, summaryFmt: pct, summaryLabel: 'avg 4' },
+  { key: 'rev', title: 'Revenue', value: (r) => r.revenue, fmt: money, summary: (s) => s.revenueCagr8, summaryFmt: pct, summaryLabel: '8-yr CAGR' },
+  { key: 'yoy', title: 'Y/Y Δ', value: (_r, d) => d.revenueYoY, fmt: pctSigned, summary: (s) => s.revenueYoyAvg4, summaryFmt: pct, summaryLabel: '4-yr avg' },
   { key: 'gp', title: 'Gross Profit', value: (r) => r.grossProfit, fmt: money, summary: () => null, summaryLabel: '' },
   { key: 'gm', title: 'Gross Mgn', value: (_r, d) => d.grossMargin, fmt: pct, summary: () => null, summaryLabel: '' },
-  { key: 'opinc', title: 'Op Income', value: (r) => r.operatingIncome, fmt: money, summary: (s) => s.operatingIncomeCagr8, summaryFmt: pct, summaryLabel: '8y cagr' },
-  { key: 'opmar', title: 'Op Margin', value: (_r, d) => d.operatingMargin, fmt: pct, summary: (s) => s.operatingMarginAvg4, summaryFmt: pct, summaryLabel: 'avg 4' },
+  { key: 'opinc', title: 'Op Income', value: (r) => r.operatingIncome, fmt: money, summary: (s) => s.operatingIncomeCagr8, summaryFmt: pct, summaryLabel: '8-yr CAGR' },
+  { key: 'opmar', title: 'Op Margin', value: (_r, d) => d.operatingMargin, fmt: pct, summary: (s) => s.operatingMarginAvg4, summaryFmt: pct, summaryLabel: '4-yr avg' },
   { key: 'ni', title: 'Net Income', value: (r) => r.netIncome, fmt: money, summary: () => null, summaryLabel: '' },
   { key: 'nm', title: 'Net Mgn', value: (_r, d) => d.netMargin, fmt: pct, summary: () => null, summaryLabel: '' },
-  { key: 'ocf', title: 'Op Cash Flow', value: (r) => r.operatingCashFlow, fmt: money, summary: (s) => s.ocfCagr8, summaryFmt: pct, summaryLabel: '8y cagr' },
-  { key: 'capex', title: 'Capex', value: (r) => r.capex, fmt: money, summary: (s) => s.capexCagr8, summaryFmt: pct, summaryLabel: '8y cagr' },
-  { key: 'sbc', title: 'SBC', value: (r) => r.sbc, fmt: money, summary: (s) => s.sbcCagr8, summaryFmt: pct, summaryLabel: '8y cagr' },
-  { key: 'fcf', title: 'Adj FCF', value: (_r, d) => d.adjFcf, fmt: money, summary: (s) => s.adjFcfCagr8, summaryFmt: pct, summaryLabel: '8y cagr' },
-  { key: 'fcfm', title: 'Adj FCF Mgn', value: (_r, d) => d.adjFcfMargin, fmt: pct, summary: (s) => s.adjFcfMarginAvg4, summaryFmt: pct, summaryLabel: 'avg 4' },
-  { key: 'fcfy', title: 'Adj FCF Yield', value: (_r, d) => d.adjFcfYield, fmt: pct, summary: (s) => s.adjFcfYieldTrimmean, summaryFmt: pct, summaryLabel: 'trim mean' },
+  { key: 'ocf', title: 'Op Cash Flow', value: (r) => r.operatingCashFlow, fmt: money, summary: (s) => s.ocfCagr8, summaryFmt: pct, summaryLabel: '8-yr CAGR' },
+  { key: 'capex', title: 'Capex', value: (r) => r.capex, fmt: money, summary: (s) => s.capexCagr8, summaryFmt: pct, summaryLabel: '8-yr CAGR' },
+  { key: 'sbc', title: 'SBC', value: (r) => r.sbc, fmt: money, summary: (s) => s.sbcCagr8, summaryFmt: pct, summaryLabel: '8-yr CAGR' },
+  { key: 'fcf', title: 'Adj FCF', value: (_r, d) => d.adjFcf, fmt: money, summary: (s) => s.adjFcfCagr8, summaryFmt: pct, summaryLabel: '8-yr CAGR' },
+  { key: 'fcfm', title: 'Adj FCF Mgn', value: (_r, d) => d.adjFcfMargin, fmt: pct, summary: (s) => s.adjFcfMarginAvg4, summaryFmt: pct, summaryLabel: '4-yr avg' },
+  { key: 'fcfy', title: 'Adj FCF Yield', value: (_r, d) => d.adjFcfYield, fmt: pct, summary: (s) => s.adjFcfYieldTrimmean, summaryFmt: pct, summaryLabel: 'Trimmed mean' },
   { key: 'nd', title: 'Net Debt', value: (r) => r.netDebt, fmt: money, summary: () => null, summaryLabel: '' },
-  { key: 'ndebit', title: 'ND / EBIT', value: (_r, d) => d.netDebtToEbit, fmt: (v) => num(v, 2), summary: (s) => s.netDebtEbitAvg13, summaryFmt: (v) => num(v, 2), summaryLabel: 'avg 13' },
-  { key: 'sh', title: 'Shares', value: (r) => r.shares, fmt: shares, summary: (s) => s.sharesCagr10, summaryFmt: pct, summaryLabel: '10y cagr' },
-  { key: 'mc', title: 'Market Cap', value: (r) => r.marketCap, fmt: money, summary: (s) => s.marketCapCagr10, summaryFmt: pct, summaryLabel: '10y cagr' },
-  { key: 'ev', title: 'EV', value: (_r, d) => d.enterpriseValue, fmt: money, summary: (s) => s.evCagr10, summaryFmt: pct, summaryLabel: '10y cagr' },
-  { key: 'evebit', title: 'EV/EBIT', value: (_r, d) => d.evToEbit, fmt: (v) => num(v, 1), summary: (s) => s.evEbitTrimmean, summaryFmt: (v) => num(v, 1), summaryLabel: 'trim mean' },
-  { key: 'tb', title: 'Tang Book', value: (r) => r.tangibleBook, fmt: money, summary: (s) => s.tangibleBookCagr10, summaryFmt: pct, summaryLabel: '10y cagr' },
+  { key: 'ndebit', title: 'ND / EBIT', value: (_r, d) => d.netDebtToEbit, fmt: (v) => num(v, 2), summary: (s) => s.netDebtEbitAvg13, summaryFmt: (v) => num(v, 2), summaryLabel: '13-yr avg' },
+  { key: 'sh', title: 'Shares', value: (r) => r.shares, fmt: shares, summary: (s) => s.sharesCagr10, summaryFmt: pct, summaryLabel: '10-yr CAGR' },
+  { key: 'mc', title: 'Market Cap', value: (r) => r.marketCap, fmt: money, summary: (s) => s.marketCapCagr10, summaryFmt: pct, summaryLabel: '10-yr CAGR' },
+  { key: 'ev', title: 'EV', value: (_r, d) => d.enterpriseValue, fmt: money, summary: (s) => s.evCagr10, summaryFmt: pct, summaryLabel: '10-yr CAGR' },
+  { key: 'evebit', title: 'EV/EBIT', value: (_r, d) => d.evToEbit, fmt: (v) => num(v, 1), summary: (s) => s.evEbitTrimmean, summaryFmt: (v) => num(v, 1), summaryLabel: 'Trimmed mean' },
+  { key: 'tb', title: 'Tang Book', value: (r) => r.tangibleBook, fmt: money, summary: (s) => s.tangibleBookCagr10, summaryFmt: pct, summaryLabel: '10-yr CAGR' },
   // income-split waterfall components (sheet Z, AA, AB)
   { key: 'opni', title: 'OpInc − NetInc', value: (_r, d) => d.opIncMinusNetInc, fmt: money, summary: () => null, summaryLabel: '' },
   { key: 'gpop', title: 'GP − OpInc', value: (_r, d) => d.grossProfitMinusOpInc, fmt: money, summary: () => null, summaryLabel: '' },
@@ -92,7 +92,7 @@ export default function CompanyScreen() {
   const refreshAction =
     Platform.OS === 'web' && !NETWORK_BLOCKED && !reviewing
       ? {
-          label: refresh.isPending ? 'refreshing…' : '↻ refresh',
+          label: refresh.isPending ? 'Refreshing…' : '↻ Refresh',
           onPress: () => refresh.mutate(),
           disabled: refresh.isPending,
         }
@@ -191,16 +191,17 @@ export default function CompanyScreen() {
             />
           </View>
         </View>
+        <Glossary />
       </Card>
 
       <Card>
         <SectionTitle>Ownership · Sentiment</SectionTitle>
         <View style={styles.ownStrip}>
-          <OwnCell label="insider" value={pct(own.insiderOwnership, 2)} />
-          <OwnCell label="insider Δ" value={pctSigned(own.insiderOwnershipChange, 2)} v={own.insiderOwnershipChange} />
-          <OwnCell label="institut." value={pct(own.institutionalOwnership, 2)} />
-          <OwnCell label="short int" value={own.shortInterest ?? '–'} />
-          <OwnCell label="momentum" value={pctSigned(momentum, 1)} v={momentum} />
+          <OwnCell label="Insiders" value={pct(own.insiderOwnership, 2)} />
+          <OwnCell label="Insider Δ" value={pctSigned(own.insiderOwnershipChange, 2)} v={own.insiderOwnershipChange} />
+          <OwnCell label="Institutions" value={pct(own.institutionalOwnership, 2)} />
+          <OwnCell label="Short int." value={own.shortInterest ?? '–'} />
+          <OwnCell label="Momentum" value={pctSigned(momentum, 1)} v={momentum} />
         </View>
       </Card>
 
@@ -215,8 +216,11 @@ export default function CompanyScreen() {
             <SectionTitle>Historical Data</SectionTitle>
             <CapexInfoTag />
           </View>
+          <Mono size="xs" color={colors.blue} bold>
+            ▸ Tap any column heading (the boxed name and mini chart) to open its full chart.
+          </Mono>
           <Mono size="xs" color={colors.textFaint}>
-            tap a column header to chart that metric
+            Swipe sideways for more columns, or pick a group below.
           </Mono>
         </View>
         <HistoryTable snapshotRows={snapshot.rows} derived={analysis.derived} summary={analysis.summary} />
@@ -224,6 +228,48 @@ export default function CompanyScreen() {
 
       <DataSourceCard source={snapshot.dataSource} notes={snapshot.dataNotes} />
     </ScrollView>
+  );
+}
+
+const GLOSSARY: [string, string][] = [
+  ['P/E (live)', "market cap at today's price ÷ TTM net income: what you pay per $1 of profit."],
+  ['P/E (snap)', 'the same, using the market cap on the snapshot date.'],
+  ['EV / Op Inc', 'enterprise value (market cap + net debt) ÷ TTM operating income. Lower is cheaper.'],
+  ['Adj FCF Yield', 'TTM adjusted free cash flow ÷ market cap: the cash return if you owned the whole company.'],
+  ['ND / Op Inc', 'net debt ÷ operating income: roughly the years of profit it would take to repay debt. Above ~3 is high.'],
+  ['Op Margin', 'TTM operating income ÷ revenue.'],
+  ['ROIC', 'return on invested capital, from the paid data provider (– with free data).'],
+  ['P/Tang Book', 'market cap ÷ tangible book value (equity minus goodwill and intangibles).'],
+  ['P/Adj OCF', 'market cap ÷ (operating cash flow − stock-based compensation).'],
+  ['Adj ROIC', 'operating income ÷ (tangible book + net debt): profit on the capital the business actually uses.'],
+];
+
+/** Plain-English definitions of the summary metrics, on demand. */
+function Glossary() {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <View style={{ marginTop: space.sm }}>
+      <Pressable
+        onPress={() => {
+          tapHaptic();
+          setOpen((v) => !v);
+        }}
+        accessibilityRole="button"
+        hitSlop={6}
+      >
+        <Mono size="xs" color={colors.blue}>
+          {open ? '▾ Hide what these mean' : 'ⓘ What do these numbers mean?'}
+        </Mono>
+      </Pressable>
+      {open &&
+        GLOSSARY.map(([term, meaning]) => (
+          <View key={term} style={{ marginTop: 4 }}>
+            <Mono size="xs" color={colors.textDim}>
+              <Mono size="xs" color={colors.text} bold>{term}</Mono>: {meaning}
+            </Mono>
+          </View>
+        ))}
+    </View>
   );
 }
 
@@ -320,6 +366,7 @@ function MetricChart({
           <Mono size="xs" color={colors.accent}>
             {sel ? `${sel.label} · ${col.fmt(sel.value)}` : ''}
           </Mono>
+          <Mono size="xs" color={colors.textFaint}>Tap a bar to read its value</Mono>
         </View>
         <View style={{ flexDirection: 'row', gap: 4 }}>
           <Chip label="10Y" active={period === '10y'} onPress={() => setPeriod('10y')} />
@@ -446,7 +493,7 @@ function HistoryTable({
                 {/* header: title and sparkline share the column's right edge
                     with the numbers below; tap to open the metric chart */}
                 <Pressable
-                  style={styles.colHead}
+                  style={[styles.colHead, styles.colHeadBtn, chartKey === col.key && styles.colHeadOn]}
                   onPress={() => {
                     tapHaptic();
                     setChartKey((k) => (k === col.key ? null : col.key));
@@ -455,9 +502,9 @@ function HistoryTable({
                   accessibilityLabel={`chart ${col.title}`}
                 >
                   <Mono size="sm" color={chartKey === col.key ? colors.accent : colors.text} bold>
-                    {col.title}
+                    {col.title} {chartKey === col.key ? '▴' : '▾'}
                   </Mono>
-                  <Sparkline values={sparklineWindow(values)} width={COL_W - 12} height={18} />
+                  <Sparkline values={sparklineWindow(values)} width={COL_W - 20} height={18} />
                 </Pressable>
                 {values.map((v, i) => (
                   <View key={i} style={[styles.cellRow, { alignItems: 'flex-end' }]}>
@@ -515,6 +562,17 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     alignSelf: 'stretch',
   },
+  // looks like a button: it opens the metric's full chart
+  colHeadBtn: {
+    borderWidth: 1,
+    borderColor: colors.blueDim,
+    backgroundColor: colors.chipBg,
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingTop: 3,
+    marginBottom: 2,
+  },
+  colHeadOn: { borderColor: colors.accent },
   cellRow: {
     height: ROW_H,
     justifyContent: 'center',

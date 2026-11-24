@@ -19,7 +19,7 @@ import {
 import { showAlert } from '../../src/alert';
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import { analyzeCompany } from '@dvh/engine';
-import { activeSnapshot, MAX_GROUP_SIZE, useAppStore } from '../../src/store';
+import { activeSnapshot, DEFAULT_HORIZON, MAX_GROUP_SIZE, useAppStore } from '../../src/store';
 import { APP_ANALYZE_OPTIONS } from '../../src/analysis';
 import { useTickerSearch } from '../../src/data';
 import { colors, space, type } from '../../src/theme';
@@ -93,7 +93,7 @@ function SwipeableRow({
             onDelete();
           }}
           accessibilityRole="button"
-          accessibilityLabel="remove from watchlist"
+          accessibilityLabel="Remove from watchlist"
         >
           <Mono size="sm" color={colors.text} bold>Remove</Mono>
         </Pressable>
@@ -140,10 +140,12 @@ function WatchRow({ ticker }: { ticker: string }) {
     [snapshot, state?.overrides, capexTreatment],
   );
 
-  const base5 = analysis?.scenarios.base[5];
-  const hasForecast = base5?.status === 'ok' && base5.fairValuePerShare != null;
+  // the base case at the horizon this company's Valuation tab is set to
+  const horizon = state?.horizon ?? DEFAULT_HORIZON;
+  const base = analysis?.scenarios.base[horizon];
+  const hasForecast = base?.status === 'ok' && base.fairValuePerShare != null;
   const upside =
-    hasForecast && snapshot ? base5!.fairValuePerShare! / snapshot.quote.price - 1 : null;
+    hasForecast && snapshot ? base!.fairValuePerShare! / snapshot.quote.price - 1 : null;
 
   const showActions = () => {
     warningHaptic();
@@ -182,35 +184,41 @@ function WatchRow({ ticker }: { ticker: string }) {
       <View style={{ flex: 1.2 }}>
         <Mono bold>{ticker}</Mono>
         <Mono size="xs" color={colors.textFaint} lines={1}>
-          {snapshot?.name ?? 'no data'}
+          {snapshot?.name ?? 'No data yet'}
         </Mono>
       </View>
       <View style={styles.cell}>
         <Mono size="sm">{price(snapshot?.quote.price ?? null)}</Mono>
-        <Mono size="xs" color={colors.textFaint}>px</Mono>
+        <Mono size="xs" color={colors.textFaint}>Price</Mono>
       </View>
       <View style={styles.cell}>
         <Mono size="sm">{ratio(analysis?.header.peLiveCap ?? null)}</Mono>
-        <Mono size="xs" color={colors.textFaint}>p/e</Mono>
+        <Mono size="xs" color={colors.textFaint}>P/E</Mono>
       </View>
       <View style={styles.cell}>
         <Mono size="sm">{ratio(analysis?.header.evOverOperatingIncome ?? null)}</Mono>
-        <Mono size="xs" color={colors.textFaint}>ev/ebit</Mono>
+        <Mono size="xs" color={colors.textFaint}>EV/EBIT</Mono>
       </View>
       <View style={styles.cell}>
         <Mono size="sm">{pct(analysis?.header.adjFcfYield ?? null)}</Mono>
-        <Mono size="xs" color={colors.textFaint}>fcf yld</Mono>
+        <Mono size="xs" color={colors.textFaint}>FCF yield</Mono>
       </View>
-      <View style={[styles.cell, { alignItems: 'flex-end' }]}>
+      <View
+        style={[styles.cell, { alignItems: 'flex-end' }]}
+        accessibilityLabel={
+          hasForecast
+            ? `Base case ${horizon}-year fair value ${upside! >= 0 ? 'above' : 'below'} price by ${Math.abs(upside! * 100).toFixed(0)}%`
+            : 'No base case forecast'
+        }
+      >
         {hasForecast ? (
-          <Chip
-            label={`${upside! >= 0 ? '+' : ''}${(upside! * 100).toFixed(0)}%`}
-            tone={upside! >= 0 ? 'good' : 'bad'}
-            active
-          />
+          <Mono size="sm" bold color={upside! >= 0 ? colors.accent : colors.red}>
+            {`${upside! >= 0 ? '+' : ''}${(upside! * 100).toFixed(0)}%`}
+          </Mono>
         ) : (
-          <Mono size="xs" color={colors.textFaint}>–</Mono>
+          <Mono size="sm" color={colors.textFaint}>–</Mono>
         )}
+        <Mono size="xs" color={colors.textFaint}>Upside</Mono>
       </View>
     </Pressable>
   );
@@ -309,7 +317,7 @@ export default function WatchlistScreen() {
         <TextInput
           ref={searchRef}
           style={styles.search}
-          placeholder="search or filter tickers…"
+          placeholder="Search or filter tickers…"
           placeholderTextColor={colors.textFaint}
           autoCapitalize="characters"
           autoCorrect={false}
@@ -383,7 +391,7 @@ export default function WatchlistScreen() {
         {addingGroup ? (
           <TextInput
             style={styles.groupInput}
-            placeholder="group name"
+            placeholder="Group name"
             placeholderTextColor={colors.textFaint}
             value={groupDraft}
             onChangeText={setGroupDraft}
@@ -394,7 +402,7 @@ export default function WatchlistScreen() {
           />
         ) : (
           <Pressable style={styles.groupChip} onPress={() => setAddingGroup(true)}>
-            <Mono size="xs" color={colors.blue}>+ new group</Mono>
+            <Mono size="xs" color={colors.blue}>+ New group</Mono>
           </Pressable>
         )}
       </ScrollView>
@@ -403,13 +411,13 @@ export default function WatchlistScreen() {
         <View style={styles.results}>
           {search.isLoading && (
             <View style={styles.resultRow}>
-              <Mono size="sm" color={colors.textFaint}>searching…</Mono>
+              <Mono size="sm" color={colors.textFaint}>Searching…</Mono>
             </View>
           )}
           {search.isError && (
             <View style={styles.resultRow}>
               <Mono size="xs" color={colors.red}>
-                search failed — check the API key / proxy in Settings
+                Search failed: check the API key or proxy in Settings.
               </Mono>
             </View>
           )}
@@ -431,11 +439,11 @@ export default function WatchlistScreen() {
                 color={r.unsupported ? colors.amber : r.bundled ? colors.accent : colors.textFaint}
               >
                 {r.unsupported
-                  ? 'not supported'
+                  ? 'Not supported'
                   : r.bundled
-                    ? 'data bundled'
+                    ? 'Data bundled'
                     : search.source === 'free'
-                      ? 'free live data'
+                      ? 'Free live data'
                       : r.exchange}
               </Mono>
             </Pressable>
@@ -462,7 +470,7 @@ export default function WatchlistScreen() {
           {!allTickers.has(q) && /^[A-Z.\-]{1,10}$/.test(q) && (
             <Pressable style={styles.resultRow} onPress={addManual}>
               <Mono size="sm" color={colors.accent}>
-                add "{q}" to {activeGroup?.name}
+                Add "{q}" to {activeGroup?.name}
               </Mono>
             </Pressable>
           )}

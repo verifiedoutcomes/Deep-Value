@@ -196,6 +196,83 @@ describe('share counts', () => {
   });
 });
 
+describe('capex: the total, not a sub-line', () => {
+  const { PaymentsToAcquirePropertyPlantAndEquipment: _p, ...rest } = base(Y);
+  const da = { DepreciationDepletionAndAmortization: [fy(Y, 10)] };
+
+  it('a PP&E line under half of D&A gives way to the larger total (United Rentals)', () => {
+    const a = extractAnnuals(
+      [doc({
+        ...rest,
+        ...da,
+        Revenues: [fy(Y, 100)],
+        PaymentsToAcquirePropertyPlantAndEquipment: [fy(Y, 1)], // non-rental only
+        PaymentsToAcquireProductiveAssets: [fy(Y, 14)], // incl. fleet purchases
+      })],
+      2007,
+    );
+    expect(a.at(-1)!.capex).toBe(-14);
+  });
+
+  it('PP&E and "other" PP&E add up when they are the split (URI before 2011)', () => {
+    const a = extractAnnuals(
+      [doc({
+        ...rest,
+        ...da,
+        Revenues: [fy(Y, 100)],
+        PaymentsToAcquirePropertyPlantAndEquipment: [fy(Y, 1)],
+        PaymentsToAcquireOtherPropertyPlantAndEquipment: [fy(Y, 9)],
+      })],
+      2007,
+    );
+    expect(a.at(-1)!.capex).toBe(-10);
+  });
+
+  it('a fifth of a fundable total is a sub-line even when D&A is understated (URI 2018)', () => {
+    const a = extractAnnuals(
+      [doc({
+        ...rest,
+        DepreciationDepletionAndAmortization: [fy(Y, 0.3)], // non-rental only
+        Revenues: [fy(Y, 100)],
+        NetCashProvidedByUsedInOperatingActivities: [fy(Y, 28)],
+        PaymentsToAcquirePropertyPlantAndEquipment: [fy(Y, 0.2)],
+        PaymentsToAcquireProductiveAssets: [fy(Y, 2.3)],
+      })],
+      2007,
+    );
+    expect(a.at(-1)!.capex).toBe(-2.3);
+  });
+
+  it('a total beyond operating cash flow bundles acquisitions and is ignored (Williams 2014)', () => {
+    const a = extractAnnuals(
+      [doc({
+        ...rest,
+        DepreciationDepletionAndAmortization: [fy(Y, 1)],
+        Revenues: [fy(Y, 100)],
+        NetCashProvidedByUsedInOperatingActivities: [fy(Y, 3.4)],
+        PaymentsToAcquirePropertyPlantAndEquipment: [fy(Y, 4)],
+        PaymentsToAcquireProductiveAssets: [fy(Y, 20.8)],
+      })],
+      2007,
+    );
+    expect(a.at(-1)!.capex).toBe(-4);
+  });
+
+  it('a plausible PP&E line wins over a larger total that bundles acquisitions (Williams)', () => {
+    const a = extractAnnuals(
+      [doc({
+        ...rest,
+        ...da,
+        Revenues: [fy(Y, 100)],
+        PaymentsToAcquirePropertyPlantAndEquipment: [fy(Y, 12)],
+        PaymentsToAcquireProductiveAssets: [fy(Y, 26)],
+      })],
+      2007,
+    );
+    expect(a.at(-1)!.capex).toBe(-12);
+  });
+});
+
 describe('fallbacks are flagged, never silent', () => {
   it('missing SBC is zero with a note; missing capex stays blank with a note', () => {
     const notes = new Set<string>();

@@ -17,7 +17,7 @@ export default function DevParityScreen() {
   if (parity.isLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, padding: space.lg }}>
-        <Mono color={colors.textDim}>pulling META live…</Mono>
+        <Mono color={colors.textDim}>Pulling META live…</Mono>
       </View>
     );
   }

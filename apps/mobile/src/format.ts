@@ -15,7 +15,11 @@ export function money(v: Maybe, currency = '$'): string {
 
 export function price(v: Maybe, currency = '$'): string {
   if (v == null) return DASH;
-  return `${currency}${v.toFixed(2)}`;
+  const sign = v < 0 ? '-' : '';
+  return `${sign}${currency}${Math.abs(v).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export function pct(v: Maybe, digits = 1): string {

@@ -651,3 +651,66 @@ disagreed, **the file won**; those cases are called out explicitly.
     artifact bundles all 506 snapshots, 4.4 MB: rows as arrays under
     shared keys and two years of weekly prices. `fetch-preload.ts` (16
     names from the FMP dev plan) is gone.
+
+60. **Valuation usability; capex sub-lines; sharing safety (2026-11-24).**
+    - **3-year default.** Valuation opens on 3 years. Store v5 moves every
+      ticker's stored 5 to 3 once: 5 was the only default, so a stored 5
+      can't be told apart from a choice. Saved analyses keep their
+      horizon. The IRR-at-price strip, margin of safety and verdict follow
+      the horizon on screen; the sheet ties them to its 5-year block. The
+      watchlist's Upside column and the saved-analysis digest use the base
+      case at each company's horizon, and pre-v5 digests are labelled as
+      5-year.
+    - **Scenario rail.** Bull/Base/Bear and 3/5 yr sit in a fixed rail on
+      the left, each case with its fair value. When an unedited Bear or
+      Bull matches Base (app mode seeds them from Base), a banner says so
+      and how to differentiate them.
+    - **Selected company** in the header of Company, Valuation and
+      Checklist (ticker, name, price and date), with Change → watchlist
+      search.
+    - **Ask an AI for the forecast** (`apps/mobile/src/llmPrompt.ts`). It
+      asks for all three editable inputs, not just the FCF margin: growth
+      sets every year's revenue, the final-year operating margin times the
+      exit multiple sets the terminal value (usually most of the fair
+      value), and the FCF margin sets the cash on the way. It also asks
+      for exit multiples. The prompt carries ten years plus TTM of growth
+      and margins, capex and SBC intensity, today's valuation, the data
+      caveats, the model's exact mechanics and guard-rails (fade growth
+      toward ~5%, FCF margin ≤ op margin over time, normalise one-offs,
+      15–20× long-run EV/EBIT). It ends with a JSON template. The parser:
+      - takes the last fenced block that parses;
+      - accepts percent units and "14x" strings, with a warning;
+      - refuses mixed horizons, missing fields and implausible values;
+      - drops non-positive exit multiples.
+
+      Nothing applies until the user taps Apply; ↺ Reset to seeded undoes
+      it. Copying uses `execCommand` first, because the Claude viewer's
+      frame refuses the async Clipboard API, then shows the prompt for
+      manual copying.
+    - **Capex sub-lines.** The prompt's history table exposed United
+      Rentals' capex at 2% of revenue for 2009–2020: the first standard
+      tag was non-rental PP&E ($0.2B) beside $2.3B of fleet purchases.
+      Capex now gives way to a larger standard total (or PP&E + "other"
+      PP&E) when the first line is under half of D&A, or under a fifth of
+      a total that operating cash flow could fund. Results:
+      - Rejected "always take the largest": Williams' and Iron Mountain's
+        larger lines bundle acquisitions (Williams 2014: $20.8B vs $4.0B).
+      - Rejected "anchor one tag per company": tags change meaning over
+        time, and Verizon's 2009–2014 capex fell from ~$17B to under $6B.
+      - Changed 130 company-years in 30 companies, all increases from
+        implausibly small figures, mostly before 2021 (URI, Devon, Xcel,
+        Entergy, Ventas, FIS's capitalised software). Nothing else moved.
+      - Known cost: PACCAR's lease-fleet purchases count in 2009–2018 and
+        not since.
+    - **Wording.** Sentence case throughout. "Save this analysis". The
+      result reads "53% below price" with a sentence, "Expected return …
+      per year (IRR)" and "Money multiple (MOIC)" with an ⓘ card. Company
+      chart headings are boxed as buttons with a hint. There's a glossary
+      for the summary metrics and spelled-out summary labels. Prices have
+      thousands separators.
+    - **Sharing.** The repository is public. The Worker's SEC contact
+      moved to an `EDGAR_CONTACT` variable, so no personal address is in
+      the code; it remains in older commits. The FMP key has never been
+      committed. The Claude artifact holds no keys, makes no network
+      calls and declares no capabilities. Viewers' edits live in their own
+      browser storage and can't reach the owner.
