@@ -31,7 +31,7 @@ import { LIBRARY_AS_OF, LIBRARY_TICKERS } from '../../src/library';
 import { UNIVERSE, normalizeTicker as normalizeSymbol } from '@dvh/data';
 import type { SearchHit } from '../../src/data';
 
-const ROW_HEIGHT = 56;
+const ROW_HEIGHT = 50;
 const DELETE_W = 84;
 
 /** "$MSFT ", "brk.b" -> "MSFT", "BRK-B" (the SEC / Yahoo spelling). */
@@ -189,19 +189,15 @@ function WatchRow({ ticker }: { ticker: string }) {
       </View>
       <View style={styles.cell}>
         <Mono size="sm">{price(snapshot?.quote.price ?? null)}</Mono>
-        <Mono size="xs" color={colors.textFaint}>Price</Mono>
       </View>
       <View style={styles.cell}>
         <Mono size="sm">{ratio(analysis?.header.peLiveCap ?? null)}</Mono>
-        <Mono size="xs" color={colors.textFaint}>P/E</Mono>
       </View>
       <View style={styles.cell}>
         <Mono size="sm">{ratio(analysis?.header.evOverOperatingIncome ?? null)}</Mono>
-        <Mono size="xs" color={colors.textFaint}>EV/EBIT</Mono>
       </View>
       <View style={styles.cell}>
         <Mono size="sm">{pct(analysis?.header.adjFcfYield ?? null)}</Mono>
-        <Mono size="xs" color={colors.textFaint}>FCF yield</Mono>
       </View>
       <View
         style={[styles.cell, { alignItems: 'flex-end' }]}
@@ -218,9 +214,46 @@ function WatchRow({ ticker }: { ticker: string }) {
         ) : (
           <Mono size="sm" color={colors.textFaint}>–</Mono>
         )}
-        <Mono size="xs" color={colors.textFaint}>Upside</Mono>
       </View>
     </Pressable>
+  );
+}
+
+const UPSIDE_HELP =
+  "Upside compares the base case's fair value per share with today's price, at each " +
+  "company's forecast horizon (3 years unless you switch it on the Valuation tab).\n\n" +
+  '+25% means the base case says the share is worth 25% more than today; −30% means 30% ' +
+  'less. A dash means there is no base-case value yet. Bear and Bull are not included.';
+
+/** One header row for the list, so the cells don't each repeat a label. */
+function ColumnHeaders() {
+  const head = (label: string) => (
+    <Mono size="xs" color={colors.textFaint} bold>
+      {label}
+    </Mono>
+  );
+  return (
+    <View style={styles.headerRow}>
+      <View style={{ flex: 1.2 }}>{head('Company')}</View>
+      <View style={styles.cell}>{head('Price')}</View>
+      <View style={styles.cell}>{head('P/E')}</View>
+      <View style={styles.cell}>{head('EV/EBIT')}</View>
+      <View style={styles.cell}>{head('FCF yield')}</View>
+      <Pressable
+        style={[styles.cell, { alignItems: 'flex-end' }]}
+        onPress={() => {
+          tapHaptic();
+          showAlert('Upside', UPSIDE_HELP);
+        }}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="What upside means"
+      >
+        <Mono size="xs" color={colors.blue} bold>
+          Upside ⓘ
+        </Mono>
+      </Pressable>
+    </View>
   );
 }
 
@@ -476,6 +509,7 @@ export default function WatchlistScreen() {
           )}
         </View>
       )}
+      {visible.length > 0 && <ColumnHeaders />}
       <FlatList
         data={visible}
         keyExtractor={(t) => t}
@@ -591,6 +625,15 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cell: { flex: 0.8, alignItems: 'flex-start' },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space.md,
+    paddingVertical: 6,
+    gap: 4,
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   empty: {
     alignItems: 'center',
     gap: 6,
